@@ -25,4 +25,9 @@ Resources:
 * How git works: https://www.youtube.com/watch?v=0fKg7e37bQE&t=3s&ab_channel=LearnCode.academy
 * About sockets: http://www.tutorialspoint.com/unix_sockets/socket_server_example.htm
 
+Steps to setup:
+1. `make`
+2. `./basic_server`
+3. `python socket_client` - in a seperate terminal
+
 Due date: Tuesday 8pm, 21 May 2019
