@@ -23,6 +23,9 @@
 
 #define BUFFER_SIZE 1024
 
+#define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
+#define ERR_CHECK_READ if (read < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
+
 int main (int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr,"Usage: %s [port]\n",argv[0]);
@@ -110,48 +113,61 @@ int main (int argc, char *argv[]) {
                 (or read the messages)
         **/
 
-        while (true) {
-            buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
-            int read = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
+        // Game States, put this in a function later
+        bool gameStarted = false;
+        int nplayers = 0;
+        int playersAlive = 0;
 
-            if (read < 0){
-                fprintf(stderr,"Client read failed\n");
-                exit(EXIT_FAILURE);
-            }
+        struct ClientState {
+          int client_id;
+          int nlives;
+        } clientState;
 
-            // Receives client request to enter game
-            if (strstr(buf, "INIT")) {
-                int client_id = 231; // value of single player
-                printf("INIT received, sending welcome.\n");
-                buf[0] = '\0';
-                sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
-                err = send(client_fd, buf, strlen(buf), 0);
-            } else {
-                // Rejects when client connection is rejected,
-                // like when game already stared
-                fprintf(stderr,"Client rejected\n");
-                buf[0] = '\0';
-                sprintf(buf, "REJECT");
-                err = send(client_fd, buf, strlen(buf), 0);
-            }
-
-            sleep(5); //Wait 5 seconds
-
+        buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
+        int read = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
+        ERR_CHECK_READ;
+        // Receives client request to enter game
+        if (strstr(buf, "INIT")) {
+            // Fork somewhere here for multiplayer
+            int client_id = 231; // value of single player
+            printf("INIT received, sending welcome.\n");
             buf[0] = '\0';
-            sprintf(buf, "Let the games begin\n");
+            sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
+            err = send(client_fd, buf, strlen(buf), 0);
+            nplayers++;
+            // Creates clientStates
+            clientState.client_id = client_id;
+            clientState.nlives = 3;
+        } else {
+            // Rejects when client connection is rejected,
+            // like when game already stared
+            fprintf(stderr,"Client rejected\n");
+            buf[0] = '\0';
+            sprintf(buf, "REJECT");
+            err = send(client_fd, buf, strlen(buf), 0);
+        }
 
-            err = send(client_fd, buf, strlen(buf), 0); // Send another thing
-            if (err < 0){
-                fprintf(stderr,"Client write failed\n");
-                exit(EXIT_FAILURE);
-            }
+        sleep(5); // Lobby wait time, 5 seconds
 
+        // If not enough players in lobby, cancel game, Tier4
+
+        // Signals the start of the game
+        buf[0] = '\0';
+        sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
+
+        err = send(client_fd, buf, strlen(buf), 0); // Send another thing
+        ERR_CHECK_WRITE;
+
+        // Loops each game round
+        while (true) {
+
+            // Waits for move
+            printf("Waiting for input\n");
+            sleep(5); // TODO: implement time out time
+            // Clear buffer?
             read = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
+            ERR_CHECK_READ;
 
-            if (read < 0){
-                fprintf(stderr,"Client read failed\n");
-                exit(EXIT_FAILURE);
-            }
             printf("%s\n", buf);
             if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
                 fprintf(stderr, "Unexpected message, terminating\n");
@@ -163,20 +179,18 @@ int main (int argc, char *argv[]) {
             // Calculate score using the players move
             // Send information to the player
 
-
             // We need to check if the player has no more lives
+
+
             buf[0] = '\0';
             sprintf(buf, "You lose\n");
 
             err = send(client_fd, buf, strlen(buf), 0); // Send our final response
+            ERR_CHECK_WRITE;
 
-            if (err < 0){
-                    fprintf(stderr,"Client write failed\n");
-                    exit(EXIT_FAILURE);
-            }
 
-            free(buf);
         }
-
+        printf("%d,%d,%d",gameStarted,nplayers,playersAlive);
+        free(buf);
     }
 }

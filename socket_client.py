@@ -49,13 +49,17 @@ try:
             data = sock.recv(1024)
             amount_received += len(data)
             mess = data.decode()
+            print("Recieved: " + mess)
             if "WELCOME" in mess:
                 client_id = mess[-3:] # Gets the client_id
-                print(mess)
                 print("My client id is: " + client_id)
-            elif "games" in mess:
-                print("The games have begun")
-                sock.sendall("{0},MOV,CON,0".format(client_id).encode()) # Client has ID 231
+            elif "START" in mess:
+                print("The games has started!")
+                gameInfo = mess.split(",")
+                print("Players Left: " + gameInfo[1])
+                print("Lives   Left: " + gameInfo[2])
+                move = str(input("Your move: "))
+                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode()) # Client has ID 231
             elif "You lose" in mess:
                 print("We lost, closing connection")
                 exit = True
