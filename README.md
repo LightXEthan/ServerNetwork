@@ -2,6 +2,7 @@
 CITS3002 Computer Networks Project - Ethan and Daphne
 
 Project Link: https://lms.uwa.edu.au/webapps/blackboard/content/listContent.jsp?course_id=_43175_1&content_id=_1380402_1&mode=reset
+Report/Planning: https://docs.google.com/document/d/1vzbHldkf8qaPMqxqFIoJyxORLYxfj_NTtlPFrRdlR2g/edit?usp=sharing
 
 Files:
 * `basic_server.c` - Server written in C
