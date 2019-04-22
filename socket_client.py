@@ -3,16 +3,16 @@ This is a simple example of a client program written in Python.
 Again, this is a very basic example to complement the 'basic_server.c' example.
 
 
-When testing, start by initiating a connection with the server by sending the "init" message outlined in 
-the specification document. Then, wait for the server to send you a message saying the game has begun. 
+When testing, start by initiating a connection with the server by sending the "init" message outlined in
+the specification document. Then, wait for the server to send you a message saying the game has begun.
 
 Once this message has been read, plan out a couple of turns on paper and hard-code these messages to
-and from the server (i.e. play a few rounds of the 'dice game' where you know what the right and wrong 
+and from the server (i.e. play a few rounds of the 'dice game' where you know what the right and wrong
 dice rolls are). You will be able to edit this trivially later on; it is often easier to debug the code
-if you know exactly what your expected values are. 
+if you know exactly what your expected values are.
 
 From this, you should be able to bootstrap message-parsing to and from the server whilst making it easy to debug.
-Then, start to add functions in the server code that actually 'run' the game in the background. 
+Then, start to add functions in the server code that actually 'run' the game in the background.
 """
 
 import socket
@@ -25,11 +25,16 @@ server_address = ('localhost', 4444)
 print ('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
+# client_id
+client_id = 0
+
 count=0
-message = 'This is the message.  It will be repeated.'.encode()
+# Sends init to server connect to a game
+message = 'INIT'.encode()
+sock.sendall(message)
 try:
     while True:
-    
+
         exit = False
         # Send data
         message = 'This is the message.  It will be repeated.'.encode()
@@ -39,22 +44,27 @@ try:
         # Look for the response
         amount_received = 0
         amount_expected = len(message)
-        
+
         while amount_received < amount_expected:
             data = sock.recv(1024)
             amount_received += len(data)
             mess = data.decode()
-            if "games" in mess:
+            if "WELCOME" in mess:
+                client_id = mess[-3:] # Gets the client_id
+                print(mess)
+                print("My client id is: " + client_id)
+            elif "games" in mess:
                 print("The games have begun")
-                sock.sendall('231,MOV,CON,1'.encode()) # Client has ID 231
+                sock.sendall("{0},MOV,CON,0".format(client_id).encode()) # Client has ID 231
             elif "You lose" in mess:
                 print("We lost, closing connection")
                 exit = True
                 break
             else:
                 print ( 'received "%s"' % mess)
+                sleep(5) # Sleep time in seconds
         if exit:
             break
-finally:    
+finally:
     print ('closing socket')
     sock.close()
