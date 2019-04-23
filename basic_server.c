@@ -42,26 +42,6 @@ int send_message(char *msg, char *buf, int client_fd, int client_id) {
   return 1;
 }
 
-void doprocessing (int sock) {
-  int n;
-  char buffer[256];
-  bzero(buffer,256);
-  n = read(sock,buffer,255);
-
-  if (n < 0) {
-    perror("ERROR reading from socket");
-    exit(EXIT_FAILURE);
-  }
-
-  printf("Here is the message: %s\n", buffer);
-  n = write(sock,"I got your message",18);
-
-  if (n < 0) {
-    perror("ERROR writing to socket");
-    exit(EXIT_FAILURE);
-  }
-}
-
 int main (int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr,"Usage: %s [port]\n",argv[0]);
@@ -73,7 +53,7 @@ int main (int argc, char *argv[]) {
     int server_fd, client_fd, err, opt_val;
     struct sockaddr_in server, client;
     char *buf;
-    int pid;
+    //int pid;
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -197,7 +177,7 @@ int main (int argc, char *argv[]) {
             clientState.nlives = 3;
         } else {
             // Rejects when client connection is rejected,
-            // like when game already started
+            // like when game already stared
             fprintf(stderr,"Client rejected\n");
             buf[0] = '\0';
             sprintf(buf, "REJECT");
@@ -235,8 +215,8 @@ int main (int argc, char *argv[]) {
             // Rolls the dice
             srand(time(0)); //time(0)
             int dice[2]; //TODO: memory?
-            dice[0] = 2;//rand() % 6 + 1;
-            dice[1] = 2;//rand() % 6 + 1;
+            dice[0] = rand() % 6 + 1;
+            dice[1] = rand() % 6 + 1;
             int diceSum = dice[0] + dice[1];
             printf("Dice one roll: %d\n",dice[0]);
             printf("Dice two roll: %d\n",dice[1]);
@@ -246,7 +226,7 @@ int main (int argc, char *argv[]) {
               // Doubles rolled and pass is sent
               send_message("%d,PASS", buf, client_fd, clientState.client_id);
 
-            } else if (strstr(buf, "EVEN") && diceSum % 2 == 0) {
+            } else if (strstr(buf, "EVEN") && diceSum % 2 == 0 && dice[0] != dice[1]) {
               // Even rolled and pass is sent
               send_message("%d,PASS", buf, client_fd, clientState.client_id);
 
