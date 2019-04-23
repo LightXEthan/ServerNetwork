@@ -20,11 +20,27 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <math.h>
+#include <time.h>
+#include <string.h>
+#include <ctype.h>
 
 #define BUFFER_SIZE 1024
 
 #define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
 #define ERR_CHECK_READ if (read < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
+
+// Sends message to clients
+int send_message(char *msg, char *buf, int client_fd, int client_id) {
+  buf[0] = '\0';
+  sprintf(buf, msg, client_id);
+  int err = send(client_fd, buf, strlen(buf), 0);
+  if (err < 0) {
+    fprintf(stderr,"Client write failed\n");
+    exit(EXIT_FAILURE);
+  }
+  return 1;
+}
 
 int main (int argc, char *argv[]) {
     if (argc < 2) {
@@ -171,22 +187,65 @@ int main (int argc, char *argv[]) {
             printf("%s\n", buf);
             if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
                 fprintf(stderr, "Unexpected message, terminating\n");
-                exit(EXIT_FAILURE);
+                exit(EXIT_FAILURE); //Kick player instead Tier4
             }
 
             // We have confirmed here that the player has moved
             // Rolls the dice
+            srand(time(0)); //time(0)
+            int dice[2]; //TODO: memory?
+            dice[0] = 2;//rand() % 6 + 1;
+            dice[1] = 2;//rand() % 6 + 1;
+            int diceSum = dice[0] + dice[1];
+            printf("Dice one roll: %d\n",dice[0]);
+            printf("Dice two roll: %d\n",dice[1]);
+
             // Calculate score using the players move
-            // Send information to the player
+            if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
+              // Doubles rolled and pass is sent
+              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+
+            } else if (strstr(buf, "EVEN") && diceSum % 2 == 0) {
+              // Even rolled and pass is sent
+              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+
+            } else if (strstr(buf, "ODD") && diceSum % 2 == 1 && diceSum > 5) {
+              // Odd rolled above 5 and pass is sent
+              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+
+            } else if (strstr(buf, "CON")) {
+              // Choice from the player
+              printf("%s\n",buf);
+              char s[2] = ",";
+              char *token = strtok(buf, s);
+              while ( token != NULL && strcmp(token,"CON") != 0) {
+                token = strtok(NULL,s);
+              }
+              token = strtok(NULL,s);
+
+              if (isdigit(token[1])) {
+                token[2] = '\0';
+              } else {
+                token[1] = '\0';
+              }
+              int number = atoi(token);
+              printf("Number guessed: %d\n", number);
+
+              if (diceSum == number) {
+                send_message("%d,PASS", buf, client_fd, clientState.client_id);
+              }
+            } else {
+              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
+              clientState.nlives--;
+            }
 
             // We need to check if the player has no more lives
+            if (clientState.nlives <= 0) {
+              // Eliminate player from game
+              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
+            }
 
-
-            buf[0] = '\0';
-            sprintf(buf, "You lose\n");
-
-            err = send(client_fd, buf, strlen(buf), 0); // Send our final response
-            ERR_CHECK_WRITE;
+            // Check if no players alive, win condition
 
 
         }
