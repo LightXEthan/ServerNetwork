@@ -28,8 +28,9 @@ Resources:
 * About sockets: http://www.tutorialspoint.com/unix_sockets/socket_server_example.htm
 
 Steps to setup:
-1. `make`
-2. `./basic_server`
-3. `python socket_client` - in a seperate terminal
+1. `git clone https://github.com/LightXEthan/ServerNetwork`
+2. `make`
+3. `./basic_server 4444`
+4. `python socket_client` - in a seperate terminal
 
 Due date: Tuesday 8pm, 21 May 2019
