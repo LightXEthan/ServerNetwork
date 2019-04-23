@@ -20,6 +20,8 @@ THINGS TO DO:
 @ adding timeout, deal with unexpected message sent by server
 @ think of how can the client cheat on server
 @ reconnect after some time period when the request has been cancelled?
+@ terminate when server shut down/reset e.g. keyboard interrupt
+@ things to do when the waiting after move getting too long
 
 '''
 
@@ -77,6 +79,12 @@ try:
 
             elif "PASS" in server_msg:
                 # make move
+                print('''
+ ____   __   ____  ____ 
+/ ___) / _\ (  __)(  __)
+\___ \/    \ ) _)  ) _) 
+(____/\_/\_/(__)  (____)
+                ''')
                 move = str(input("Your move: "))
                 sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
 
@@ -84,10 +92,36 @@ try:
                 nlives -= 1
 
                 if nlives > 0:
+                    print('''
+  _  _   _   _  _         
+ | \| | /_\ | || |        
+ | .` |/ _ \| __ |  _   _ 
+ |_|\_/_/ \_\_||_| (_) (_)
+                        ''')
                     move = str(input("Your move: "))
                     sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
                 else:
                     # kick myself out
+                    # ascii art credit: http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
+                    print('''
+                          ______      _____ _              
+                         |  ____/\   |_   _| |             
+                         | |__ /  \    | | | |             
+                         |  __/ /\ \   | | | |             
+                         | | / ____ \ _| |_| |____         
+                         |_|/_/ ___\_\_____|______|        
+                         \ \   / / __ \| |  | |            
+                          \ \_/ / |  | | |  | |            
+                           \   /| |  | | |  | |            
+                            | | | |__| | |__| |            
+                           _|_|_ \____/ \____/ _  __ _____ 
+                          / ____| |  | |/ ____| |/ // ____|
+                         | (___ | |  | | |    | ' /| (___  
+                          \___ \| |  | | |    |  <  \___ \ 
+                          ____) | |__| | |____| . \ ____) |
+                         |_____/ \____/ \_____|_|\_\_____/ 
+                                                           
+                                   ''')
                     exit = True
                     break
 
@@ -97,7 +131,17 @@ try:
                 break
 
             elif "VICT" in server_msg:
-                print("We win, closing connection")
+                # ascii art credit: https://www.asciiart.eu/computers/smileys
+                print('''
+                         __          __  _____   _   _        _____  
+                         \ \        / / |_   _| | \ | |     .'     '.  
+                          \ \  /\  / /    | |   |  \| |    /  o   o  \  
+                           \ \/  \/ /     | |   | . ` |   |           | 
+                            \  /\  /     _| |_  | |\  |   |  \     /  | 
+                             \/  \/     |_____| |_| \_|    \  '---'  / 
+                                                            '._____.'  
+                                    ''')
+
                 exit = True
                 break
 
