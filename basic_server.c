@@ -42,6 +42,26 @@ int send_message(char *msg, char *buf, int client_fd, int client_id) {
   return 1;
 }
 
+void doprocessing (int sock) {
+  int n;
+  char buffer[256];
+  bzero(buffer,256);
+  n = read(sock,buffer,255);
+
+  if (n < 0) {
+    perror("ERROR reading from socket");
+    exit(EXIT_FAILURE);
+  }
+
+  printf("Here is the message: %s\n", buffer);
+  n = write(sock,"I got your message",18);
+
+  if (n < 0) {
+    perror("ERROR writing to socket");
+    exit(EXIT_FAILURE);
+  }
+}
+
 int main (int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr,"Usage: %s [port]\n",argv[0]);
@@ -53,6 +73,7 @@ int main (int argc, char *argv[]) {
     int server_fd, client_fd, err, opt_val;
     struct sockaddr_in server, client;
     char *buf;
+    int pid;
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -90,8 +111,27 @@ int main (int argc, char *argv[]) {
         if (client_fd < 0) {
             fprintf(stderr,"Could not establish new connection\n");
             exit(EXIT_FAILURE);
-
         }
+
+        /*
+        // Create child process
+        pid = fork();
+
+        if (pid < 0) {
+          perror("ERROR on fork\n");
+          exit(1);
+        }
+
+        if (pid == 0) {
+          // Client process
+          printf("PID 0: %d", pid);
+          close(server_fd);
+          //doprocessing(client_fd);
+        } else {
+          printf("PID !0: %d", pid);
+          close(client_fd);
+        }
+        */
 
         /**
         The following while loop contains some basic code that sends messages back and forth
@@ -151,6 +191,7 @@ int main (int argc, char *argv[]) {
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
             err = send(client_fd, buf, strlen(buf), 0);
             nplayers++;
+            playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;
             clientState.nlives = 3;
@@ -242,11 +283,12 @@ int main (int argc, char *argv[]) {
             // We need to check if the player has no more lives
             if (clientState.nlives <= 0) {
               // Eliminate player from game
-              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
+              send_message("%d,ELIM", buf, client_fd, clientState.client_id);
+              playersAlive--;
+            } else if (clientState.nlives > 0 && playersAlive == 1) {
+              // Check if no other players alive, win condition
+
             }
-
-            // Check if no players alive, win condition
-
 
         }
         printf("%d,%d,%d",gameStarted,nplayers,playersAlive);
