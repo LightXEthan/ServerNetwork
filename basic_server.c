@@ -255,16 +255,17 @@ int main (int argc, char *argv[]) {
               if (diceSum == number) {
                 send_message("%d,PASS", buf, client_fd, clientState.client_id);
               }
-            } else {
+            } else if (clientState.nlives > 1) {
+              // Sends fail but still in the game
               send_message("%d,FAIL", buf, client_fd, clientState.client_id);
               clientState.nlives--;
-            }
 
-            // We need to check if the player has no more lives
-            if (clientState.nlives <= 0) {
+            } else if (clientState.nlives <= 1) {
               // Eliminate player from game
+              clientState.nlives--;
               send_message("%d,ELIM", buf, client_fd, clientState.client_id);
               playersAlive--;
+
             } else if (clientState.nlives > 0 && playersAlive == 1) {
               // Check if no other players alive, win condition
 
