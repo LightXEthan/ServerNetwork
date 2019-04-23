@@ -197,7 +197,7 @@ int main (int argc, char *argv[]) {
             clientState.nlives = 3;
         } else {
             // Rejects when client connection is rejected,
-            // like when game already stared
+            // like when game already started
             fprintf(stderr,"Client rejected\n");
             buf[0] = '\0';
             sprintf(buf, "REJECT");

@@ -15,6 +15,14 @@ From this, you should be able to bootstrap message-parsing to and from the serve
 Then, start to add functions in the server code that actually 'run' the game in the background.
 """
 
+'''
+THINGS TO DO:
+@ adding timeout, deal with unexpected message sent by server
+@ think of how can the client cheat on server
+@ reconnect after some time period when the request has been cancelled?
+
+'''
+
 import socket
 from time import sleep
 # Create a TCP/IP socket
@@ -25,21 +33,19 @@ server_address = ('localhost', 4444)
 print ('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
-# client_id
+# client status
 client_id = 0
+# make it -1 for now, update when get the start message from the server
+nlives = -1
 
-count=0
 # Sends init to server connect to a game
 message = 'INIT'.encode()
 sock.sendall(message)
+
 try:
     while True:
 
         exit = False
-        # Send data
-        message = 'This is the message.  It will be repeated.'.encode()
-        print ('sending "%s"' % message)
-        sock.sendall(message)
 
         # Look for the response
         amount_received = 0
@@ -48,25 +54,66 @@ try:
         while amount_received < amount_expected:
             data = sock.recv(1024)
             amount_received += len(data)
-            mess = data.decode()
-            print("Recieved: " + mess)
-            if "WELCOME" in mess:
-                client_id = mess[-3:] # Gets the client_id
+            server_msg = data.decode()
+            print("Recieved: " + server_msg)
+
+            if "WELCOME" in server_msg:
+                client_id = server_msg[-3:] # Gets the client_id
                 print("My client id is: " + client_id)
-            elif "START" in mess:
+
+            elif "START" in server_msg:
                 print("The games has started!")
-                gameInfo = mess.split(",")
+
+                gameInfo = server_msg.split(",")
+                nlives = int(gameInfo[2])
                 print("Players Left: " + gameInfo[1])
                 print("Lives   Left: " + gameInfo[2])
+
+                # first move
                 move = str(input("Your move: "))
+                # sendall():continues to send data until either all data has been sent or an error occurs. None is returned on success. 
+                # TODO: check exception??
                 sock.sendall("{0},MOV,{1},0".format(client_id,move).encode()) # Client has ID 231
-            elif "You lose" in mess:
+
+            elif "PASS" in server_msg:
+                # make move
+                move = str(input("Your move: "))
+                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
+
+            elif "FAIL" in server_msg:
+                nlives -= 1
+
+                if nlives > 0:
+                    move = str(input("Your move: "))
+                    sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
+                else:
+                    # kick myself out
+                    exit = True
+                    break
+
+            elif "ELIM" in server_msg:
                 print("We lost, closing connection")
                 exit = True
                 break
+
+            elif "VICT" in server_msg:
+                print("We win, closing connection")
+                exit = True
+                break
+
+            elif "REJECT" in server_msg:
+                print("Request was rejected due to delayed connection")
+                exit = True
+                break
+
+            elif "CANCEL" in server_msg:
+                print("Not enough player, game cannot start")
+                # attempt to connect again??
+
             else:
-                print ( 'received "%s"' % mess)
+                print ( 'received "%s"' % server_msg)
                 sleep(5) # Sleep time in seconds
+
         if exit:
             break
 finally:
