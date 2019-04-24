@@ -56,7 +56,8 @@ int main (int argc, char *argv[]) {
     char *buf;
     int pid;
     int nplayers = 0;
-    int p[2];
+    int p1[2];
+    int p2[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -87,7 +88,12 @@ int main (int argc, char *argv[]) {
     printf("Server is listening on %d\n", port);
 
     // Setup Pipe
-    if (pipe(p) < 0) {
+    if (pipe(p1) < 0) {
+      fprintf(stderr,"Could not pipe\n");
+      exit(EXIT_FAILURE);
+    }
+
+    if (pipe(p2) < 0) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
     }
@@ -192,7 +198,7 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        sleep(10); // Lobby wait time, 5 seconds
+        sleep(5); // Lobby wait time, 5 seconds
 
         // If not enough players in lobby, cancel game, Tier4
 
@@ -202,30 +208,30 @@ int main (int argc, char *argv[]) {
         fd_set set;
         struct timeval timeout;
 
-        printf("Initiante Game Start.\n");
-        printf("PID: %d\n", pid);
-        printf("Nplayers: %d\n", nplayers);
-
         // Everyone says how many players they know
         buf[0] = '\0';
         sprintf(buf, "%d",nplayers);
-        write(p[1], buf, 13);
+        write(p1[1], buf, 13);
+
+
 
         if (nplayers == 1) {
           // Get number of players
           FD_ZERO(&set);
-          FD_SET(p[0],&set);
-          timeout.tv_sec = 3;
+          FD_SET(p1[0],&set);
+          timeout.tv_sec = 5;
+          timeout.tv_usec = 0;
           int max = 0;
+          printf("Game start initiated, counting players...\n");
           while (true) {
-            int rv = select(p[0]+1, &set, NULL, NULL, &timeout);
+            int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
             if (rv == -1) {
-              perror("select");
+              perror("Error with select\n");
             } else if (rv == 0) {
-              printf("timeout");
+              printf("Player count confirmed: %d\n", max);
               break;
             } else {
-              read(p[0],inbuf,13);
+              read(p1[0],inbuf,13);
               // Gets the highest number which is the player count
               if (atoi(inbuf) > max) {
                 max = atoi(inbuf);
@@ -236,21 +242,19 @@ int main (int argc, char *argv[]) {
           // Check min number of players
           //printf("Game start!\n");
 
-
           // Start the game, send info to players
+          buf[0] = '\0';
+          sprintf(buf, "%d",nplayers);
           for (int i = 0; i < nplayers - 1; i++) {
-            buf[0] = '\0';
-            sprintf(buf, "%d",nplayers);
-            write(p[1], buf, 13);
+            write(p2[1], buf, 13);
           }
 
         } else {
-          sleep(5);
-          read(p[0],inbuf,13);
+          sleep(1);
+          read(p2[0],inbuf,13);
           nplayers = atoi(inbuf);
         }
-        printf("Number of players: %d\n",nplayers);
-
+        //printf("Number of players: %d\n",nplayers);
 
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
@@ -262,7 +266,7 @@ int main (int argc, char *argv[]) {
         while (true) {
 
             // Waits for move
-            printf("Waiting for input\n");
+            //printf("Waiting for input\n");
             sleep(5); // TODO: implement time out time
             memset(buf,0,BUFFER_SIZE);
             rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
