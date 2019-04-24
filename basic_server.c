@@ -28,7 +28,7 @@
 #define BUFFER_SIZE 1024
 
 #define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
-#define ERR_CHECK_READ if (read < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
+#define ERR_CHECK_READ if (rec < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
 #define MIN_PLAYERS 2
 
 // Sends message to clients
@@ -56,6 +56,7 @@ int main (int argc, char *argv[]) {
     char *buf;
     int pid;
     int nplayers = 0;
+    int p[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -85,6 +86,12 @@ int main (int argc, char *argv[]) {
 
     printf("Server is listening on %d\n", port);
 
+    // Setup Pipe
+    if (pipe(p) < 0) {
+      fprintf(stderr,"Could not pipe\n");
+      exit(EXIT_FAILURE);
+    }
+
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
@@ -101,8 +108,8 @@ int main (int argc, char *argv[]) {
         pid = fork();
         nplayers++;
         if (pid < 0) {
-          perror("ERROR on fork\n");
-          exit(1);
+          fprintf(stderr,"Could not fork\n");
+          exit(EXIT_FAILURE);
         }
 
         if (pid == 0) {
@@ -161,13 +168,12 @@ int main (int argc, char *argv[]) {
         } clientState;
 
         buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
-        int read = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
+        int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
         ERR_CHECK_READ;
         // Receives client request to enter game
-        //printf("NPlayers: %d\n", nplayers);
         if (strstr(buf, "INIT")) {
             // Fork somewhere here for multiplayer
-            int client_id = 231 + nplayers; // value of single player
+            int client_id = 230 + nplayers; // value of single player
             printf("INIT received, sending welcome.\n");
             buf[0] = '\0';
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
@@ -186,12 +192,32 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        sleep(5); // Lobby wait time, 5 seconds
+        sleep(10); // Lobby wait time, 5 seconds
 
         // If not enough players in lobby, cancel game, Tier4
 
         // Signals the start of the game
         // Pipe to all processes that the game as started
+        char inbuf[13];
+
+        printf("Initiante Game Start.\n");
+        printf("PID: %d\n", pid);
+        printf("Nplayers: %d\n", nplayers);
+
+        if (nplayers == 1) {
+          // Get number of players
+          // Check min number of players
+          //printf("Game start!\n");
+          sleep(3);
+          write(p[1], nplayers, 13);
+          // Start the game, send info to players
+        } else {
+          read(p[0],inbuf,13);
+          printf("Number of players: %s\n",inbuf);
+        }
+
+
+
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
 
@@ -204,8 +230,8 @@ int main (int argc, char *argv[]) {
             // Waits for move
             printf("Waiting for input\n");
             sleep(5); // TODO: implement time out time
-            // Clear buffer?
-            read = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
+            memset(buf,0,BUFFER_SIZE);
+            rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
             ERR_CHECK_READ;
 
             printf("%s\n", buf);
