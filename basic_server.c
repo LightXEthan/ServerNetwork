@@ -57,7 +57,7 @@ int main (int argc, char *argv[]) {
     int pid;
     int nplayers = 0;
     int p1[2];
-    int p2[2];
+    //int p2[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -92,12 +92,12 @@ int main (int argc, char *argv[]) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
     }
-
+    /*
     if (pipe(p2) < 0) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
     }
-
+    */
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
@@ -246,12 +246,12 @@ int main (int argc, char *argv[]) {
           buf[0] = '\0';
           sprintf(buf, "%d",nplayers);
           for (int i = 0; i < nplayers - 1; i++) {
-            write(p2[1], buf, 13);
+            write(p1[1], buf, 13);
           }
 
         } else {
           sleep(1);
-          read(p2[0],inbuf,13);
+          read(p1[0],inbuf,13);
           nplayers = atoi(inbuf);
         }
         //printf("Number of players: %d\n",nplayers);
@@ -280,13 +280,16 @@ int main (int argc, char *argv[]) {
 
             // We have confirmed here that the player has moved
             // Rolls the dice
+            // Host process will roll dice
             srand(time(0)); //time(0)
-            int dice[2]; //TODO: memory?
+            int dice[2];
             dice[0] = rand() % 6 + 1;
             dice[1] = rand() % 6 + 1;
             int diceSum = dice[0] + dice[1];
             printf("Dice one roll: %d\n",dice[0]);
             printf("Dice two roll: %d\n",dice[1]);
+
+            // Pipe Host -> Children
 
             // Calculate score using the players move
             if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
@@ -337,11 +340,15 @@ int main (int argc, char *argv[]) {
               clientState.nlives--;
               send_message("%d,ELIM", buf, client_fd, clientState.client_id);
               playersAlive--;
+              // Kick player from game
 
             } else if (clientState.nlives > 0 && playersAlive == 1) {
               // Check if no other players alive, win condition
 
             }
+
+            // Pipe Children -> Host, if they passed or died
+            // Edgecase if they more than one person is eliminated and there's no on left both get vict
 
         }
         printf("%d,%d,%d",gameStarted,nplayers,playersAlive);
