@@ -53,7 +53,7 @@ int main (int argc, char *argv[]) {
     int server_fd, client_fd, err, opt_val;
     struct sockaddr_in server, client;
     char *buf;
-    //int pid;
+    int pid;
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -93,7 +93,7 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        /*
+
         // Create child process
         pid = fork();
 
@@ -103,15 +103,15 @@ int main (int argc, char *argv[]) {
         }
 
         if (pid == 0) {
-          // Client process
-          printf("PID 0: %d", pid);
+          // Child process/Client process
           close(server_fd);
-          //doprocessing(client_fd);
+
         } else {
-          printf("PID !0: %d", pid);
+          // Parent process, will loop back and wait for another connection
           close(client_fd);
+          continue;
         }
-        */
+
 
         /**
         The following while loop contains some basic code that sends messages back and forth
@@ -250,6 +250,11 @@ int main (int argc, char *argv[]) {
                 token[1] = '\0';
               }
               int number = atoi(token);
+              if (number == 0) {
+                // No number was selected
+                fprintf(stderr, "Player did not specify number.\n");
+                exit(EXIT_FAILURE); //Kick player instead Tier4
+              }
               printf("Number guessed: %d\n", number);
 
               if (diceSum == number) {
@@ -257,8 +262,8 @@ int main (int argc, char *argv[]) {
               }
             } else if (clientState.nlives > 1) {
               // Sends fail but still in the game
-              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
               clientState.nlives--;
+              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
 
             } else if (clientState.nlives <= 1) {
               // Eliminate player from game

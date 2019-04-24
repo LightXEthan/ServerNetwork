@@ -73,73 +73,69 @@ try:
 
                 # first move
                 move = str(input("Your move: "))
-                # sendall():continues to send data until either all data has been sent or an error occurs. None is returned on success. 
+                # sendall():continues to send data until either all data has been sent or an error occurs. None is returned on success.
                 # TODO: check exception??
                 sock.sendall("{0},MOV,{1},0".format(client_id,move).encode()) # Client has ID 231
 
             elif "PASS" in server_msg:
                 # make move
                 print('''
- ____   __   ____  ____ 
+ ____   __   ____  ____
 / ___) / _\ (  __)(  __)
-\___ \/    \ ) _)  ) _) 
+\___ \/    \ ) _)  ) _)
 (____/\_/\_/(__)  (____)
                 ''')
+                print("Lives Left: " + str(nlives))
                 move = str(input("Your move: "))
                 sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
 
             elif "FAIL" in server_msg:
                 nlives -= 1
-
-                if nlives > 0:
-                    print('''
-  _  _   _   _  _         
- | \| | /_\ | || |        
- | .` |/ _ \| __ |  _   _ 
+                print('''
+  _  _   _   _  _
+ | \| | /_\ | || |
+ | .` |/ _ \| __ |  _   _
  |_|\_/_/ \_\_||_| (_) (_)
                         ''')
-                    move = str(input("Your move: "))
-                    sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
-                else:
-                    # kick myself out
-                    # ascii art credit: http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
-                    print('''
-                          ______      _____ _              
-                         |  ____/\   |_   _| |             
-                         | |__ /  \    | | | |             
-                         |  __/ /\ \   | | | |             
-                         | | / ____ \ _| |_| |____         
-                         |_|/_/ ___\_\_____|______|        
-                         \ \   / / __ \| |  | |            
-                          \ \_/ / |  | | |  | |            
-                           \   /| |  | | |  | |            
-                            | | | |__| | |__| |            
-                           _|_|_ \____/ \____/ _  __ _____ 
-                          / ____| |  | |/ ____| |/ // ____|
-                         | (___ | |  | | |    | ' /| (___  
-                          \___ \| |  | | |    |  <  \___ \ 
-                          ____) | |__| | |____| . \ ____) |
-                         |_____/ \____/ \_____|_|\_\_____/ 
-                                                           
-                                   ''')
-                    exit = True
-                    break
+                print("Lives Left: " + str(nlives))
+                move = str(input("Your move: "))
+                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
 
             elif "ELIM" in server_msg:
-                print("We lost, closing connection")
+                print("You lost, good game.")
+                # ascii art credit: http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
+                print('''
+                      ______      _____ _
+                     |  ____/\   |_   _| |
+                     | |__ /  \    | | | |
+                     |  __/ /\ \   | | | |
+                     | | / ____ \ _| |_| |____
+                     |_|/_/ ___\_\_____|______|
+                     \ \   / / __ \| |  | |
+                      \ \_/ / |  | | |  | |
+                       \   /| |  | | |  | |
+                        | | | |__| | |__| |
+                       _|_|_ \____/ \____/ _  __
+                      / ____| |  | |/ ____| |/ /
+                     | (___ | |  | | |    | ' /
+                      \___ \| |  | | |    |  <
+                      ____) | |__| | |____| . \\
+                     |_____/ \____/ \_____|_|\_\\
+
+                               ''')
                 exit = True
                 break
 
             elif "VICT" in server_msg:
                 # ascii art credit: https://www.asciiart.eu/computers/smileys
                 print('''
-                         __          __  _____   _   _        _____  
-                         \ \        / / |_   _| | \ | |     .'     '.  
-                          \ \  /\  / /    | |   |  \| |    /  o   o  \  
-                           \ \/  \/ /     | |   | . ` |   |           | 
-                            \  /\  /     _| |_  | |\  |   |  \     /  | 
-                             \/  \/     |_____| |_| \_|    \  '---'  / 
-                                                            '._____.'  
+                         __          __  _____   _   _        _____
+                         \ \        / / |_   _| | \ | |     .'     '.
+                          \ \  /\  / /    | |   |  \| |    /  o   o  \
+                           \ \/  \/ /     | |   | . ` |   |           |
+                            \  /\  /     _| |_  | |\  |   |  \     /  |
+                             \/  \/     |_____| |_| \_|    \  '---'  /
+                                                            '._____.'
                                     ''')
 
                 exit = True
