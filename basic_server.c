@@ -199,23 +199,57 @@ int main (int argc, char *argv[]) {
         // Signals the start of the game
         // Pipe to all processes that the game as started
         char inbuf[13];
+        fd_set set;
+        struct timeval timeout;
 
         printf("Initiante Game Start.\n");
         printf("PID: %d\n", pid);
         printf("Nplayers: %d\n", nplayers);
 
+        // Everyone says how many players they know
+        buf[0] = '\0';
+        sprintf(buf, "%d",nplayers);
+        write(p[1], buf, 13);
+
         if (nplayers == 1) {
           // Get number of players
+          FD_ZERO(&set);
+          FD_SET(p[0],&set);
+          timeout.tv_sec = 3;
+          int max = 0;
+          while (true) {
+            int rv = select(p[0]+1, &set, NULL, NULL, &timeout);
+            if (rv == -1) {
+              perror("select");
+            } else if (rv == 0) {
+              printf("timeout");
+              break;
+            } else {
+              read(p[0],inbuf,13);
+              // Gets the highest number which is the player count
+              if (atoi(inbuf) > max) {
+                max = atoi(inbuf);
+              }
+            }
+          }
+          nplayers = max;
           // Check min number of players
           //printf("Game start!\n");
-          sleep(3);
-          write(p[1], nplayers, 13);
-          // Start the game, send info to players
-        } else {
-          read(p[0],inbuf,13);
-          printf("Number of players: %s\n",inbuf);
-        }
 
+
+          // Start the game, send info to players
+          for (int i = 0; i < nplayers - 1; i++) {
+            buf[0] = '\0';
+            sprintf(buf, "%d",nplayers);
+            write(p[1], buf, 13);
+          }
+
+        } else {
+          sleep(5);
+          read(p[0],inbuf,13);
+          nplayers = atoi(inbuf);
+        }
+        printf("Number of players: %d\n",nplayers);
 
 
         buf[0] = '\0';
