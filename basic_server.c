@@ -29,6 +29,7 @@
 
 #define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
 #define ERR_CHECK_READ if (read < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
+#define MIN_PLAYERS 2
 
 // Sends message to clients
 int send_message(char *msg, char *buf, int client_fd, int client_id) {
@@ -54,6 +55,7 @@ int main (int argc, char *argv[]) {
     struct sockaddr_in server, client;
     char *buf;
     int pid;
+    int nplayers = 0;
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -95,8 +97,9 @@ int main (int argc, char *argv[]) {
 
 
         // Create child process
+        // If game already started, the connection can be disconnected instead of being forked
         pid = fork();
-
+        nplayers++;
         if (pid < 0) {
           perror("ERROR on fork\n");
           exit(1);
@@ -111,7 +114,6 @@ int main (int argc, char *argv[]) {
           close(client_fd);
           continue;
         }
-
 
         /**
         The following while loop contains some basic code that sends messages back and forth
@@ -151,7 +153,6 @@ int main (int argc, char *argv[]) {
 
         // Game States, put this in a function later
         bool gameStarted = false;
-        int nplayers = 0;
         int playersAlive = 0;
 
         struct ClientState {
@@ -163,25 +164,26 @@ int main (int argc, char *argv[]) {
         int read = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
         ERR_CHECK_READ;
         // Receives client request to enter game
+        //printf("NPlayers: %d\n", nplayers);
         if (strstr(buf, "INIT")) {
             // Fork somewhere here for multiplayer
-            int client_id = 231; // value of single player
+            int client_id = 231 + nplayers; // value of single player
             printf("INIT received, sending welcome.\n");
             buf[0] = '\0';
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
             err = send(client_fd, buf, strlen(buf), 0);
-            nplayers++;
             playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;
             clientState.nlives = 3;
         } else {
             // Rejects when client connection is rejected,
-            // like when game already stared
+            // like when game already started
             fprintf(stderr,"Client rejected\n");
             buf[0] = '\0';
             sprintf(buf, "REJECT");
             err = send(client_fd, buf, strlen(buf), 0);
+            exit(EXIT_FAILURE);
         }
 
         sleep(5); // Lobby wait time, 5 seconds
@@ -189,6 +191,7 @@ int main (int argc, char *argv[]) {
         // If not enough players in lobby, cancel game, Tier4
 
         // Signals the start of the game
+        // Pipe to all processes that the game as started
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
 
