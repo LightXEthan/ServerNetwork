@@ -18,12 +18,14 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <math.h>
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 1024
 
@@ -32,10 +34,12 @@
 #define MIN_PLAYERS 2
 
 // Sends message to clients
-int send_message(char *msg, char *buf, int client_fd, int client_id) {
+int send_message(char *msg, int client_fd, int client_id) {
+  char *buf = calloc(BUFFER_SIZE, sizeof(char));
   buf[0] = '\0';
   sprintf(buf, msg, client_id);
   int err = send(client_fd, buf, strlen(buf), 0);
+  free(buf);
   if (err < 0) {
     fprintf(stderr,"Client write failed\n");
     exit(EXIT_FAILURE);
@@ -56,8 +60,9 @@ int main (int argc, char *argv[]) {
     char *buf;
     int pid;
     int nplayers = 0;
+    bool host = false;
+    bool gameStarted = false;
     int p1[2];
-    //int p2[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -87,17 +92,16 @@ int main (int argc, char *argv[]) {
 
     printf("Server is listening on %d\n", port);
 
-    // Setup Pipe
+    // Setup Pipe for inter-process communication
     if (pipe(p1) < 0) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
     }
-    /*
-    if (pipe(p2) < 0) {
-      fprintf(stderr,"Could not pipe\n");
-      exit(EXIT_FAILURE);
-    }
-    */
+
+    // Create shared memory to check if game has started
+    void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
+    memcpy(shmem, "GNS", 4);
+
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
@@ -108,9 +112,7 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-
         // Create child process
-        // If game already started, the connection can be disconnected instead of being forked
         pid = fork();
         nplayers++;
         if (pid < 0) {
@@ -165,8 +167,12 @@ int main (int argc, char *argv[]) {
         **/
 
         // Game States, put this in a function later
-        bool gameStarted = false;
         int playersAlive = 0;
+        fd_set set;
+
+        struct timeval timeout;
+        FD_ZERO(&set);
+        FD_SET(p1[0],&set);
 
         struct ClientState {
           int client_id;
@@ -176,9 +182,9 @@ int main (int argc, char *argv[]) {
         buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
         int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
         ERR_CHECK_READ;
+
         // Receives client request to enter game
-        if (strstr(buf, "INIT")) {
-            // Fork somewhere here for multiplayer
+        if (strstr(buf, "INIT") && strstr(shmem, "GNS")) {
             int client_id = 230 + nplayers; // value of single player
             printf("INIT received, sending welcome.\n");
             buf[0] = '\0';
@@ -188,13 +194,11 @@ int main (int argc, char *argv[]) {
             // Creates clientStates
             clientState.client_id = client_id;
             clientState.nlives = 3;
+
         } else {
-            // Rejects when client connection is rejected,
-            // like when game already started
-            fprintf(stderr,"Client rejected\n");
-            buf[0] = '\0';
-            sprintf(buf, "REJECT");
-            err = send(client_fd, buf, strlen(buf), 0);
+            // Rejects when game has already started
+            err = send(client_fd, "REJECT", 6, 0);
+            ERR_CHECK_WRITE;
             exit(EXIT_FAILURE);
         }
 
@@ -205,30 +209,31 @@ int main (int argc, char *argv[]) {
         // Signals the start of the game
         // Pipe to all processes that the game as started
         char inbuf[13];
-        fd_set set;
-        struct timeval timeout;
+        timeout.tv_sec = 5; // Timeout time
+        timeout.tv_usec = 0;
 
         // Everyone says how many players they know
         buf[0] = '\0';
         sprintf(buf, "%d",nplayers);
-        write(p1[1], buf, 13);
-
-
+        write(p1[1], buf, sizeof(int));
 
         if (nplayers == 1) {
+          // This process becomes the host
+          host = true;
+
           // Get number of players
-          FD_ZERO(&set);
-          FD_SET(p1[0],&set);
-          timeout.tv_sec = 5;
-          timeout.tv_usec = 0;
           int max = 0;
           printf("Game start initiated, counting players...\n");
+
+          // Counts number of players
           while (true) {
             int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
             if (rv == -1) {
               perror("Error with select\n");
             } else if (rv == 0) {
+              // After timeout
               printf("Player count confirmed: %d\n", max);
+              memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
             } else {
               read(p1[0],inbuf,13);
@@ -242,20 +247,21 @@ int main (int argc, char *argv[]) {
           // Check min number of players
           //printf("Game start!\n");
 
-          // Start the game, send info to players
+          // Start the game, send info to players, Each child gets the number of players
           buf[0] = '\0';
           sprintf(buf, "%d",nplayers);
+
           for (int i = 0; i < nplayers - 1; i++) {
-            write(p1[1], buf, 13);
+            write(p1[1], buf, sizeof(int));
           }
 
         } else {
           sleep(1);
-          read(p1[0],inbuf,13);
+          read(p1[0],inbuf,sizeof(int));
           nplayers = atoi(inbuf);
         }
         //printf("Number of players: %d\n",nplayers);
-
+        gameStarted = true;
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
 
@@ -281,32 +287,47 @@ int main (int argc, char *argv[]) {
             // We have confirmed here that the player has moved
             // Rolls the dice
             // Host process will roll dice
-            srand(time(0)); //time(0)
             int dice[2];
-            dice[0] = rand() % 6 + 1;
-            dice[1] = rand() % 6 + 1;
-            int diceSum = dice[0] + dice[1];
-            printf("Dice one roll: %d\n",dice[0]);
-            printf("Dice two roll: %d\n",dice[1]);
 
-            // Pipe Host -> Children
+            if (host) {
+              srand(time(0));
+              dice[0] = rand() % 6 + 1;
+              dice[1] = rand() % 6 + 1;
+
+              printf("Dice one roll: %d\n",dice[0]);
+              printf("Dice two roll: %d\n",dice[1]);
+
+              // Pipe Host -> Children
+              // Each child gets the dice
+
+              for (int i = 0; i < nplayers - 1; i++) {
+                write(p1[1],&dice[0],sizeof(int));
+                write(p1[1],&dice[1],sizeof(int));
+              }
+
+            } else {
+              read(p1[0],&dice[0],sizeof(int));
+              read(p1[0],&dice[1],sizeof(int));
+            }
+
+            int diceSum = dice[0] + dice[1];
 
             // Calculate score using the players move
+            char msg[8];
             if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
               // Doubles rolled and pass is sent
-              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+              sprintf(msg,"%s","%d,PASS");
 
             } else if (strstr(buf, "EVEN") && diceSum % 2 == 0 && dice[0] != dice[1]) {
               // Even rolled and pass is sent
-              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+              sprintf(msg,"%s","%d,PASS");
 
             } else if (strstr(buf, "ODD") && diceSum % 2 == 1 && diceSum > 5) {
               // Odd rolled above 5 and pass is sent
-              send_message("%d,PASS", buf, client_fd, clientState.client_id);
+              sprintf(msg,"%s","%d,PASS");
 
             } else if (strstr(buf, "CON")) {
-              // Choice from the player
-              printf("%s\n",buf);
+              // Choice from the player, below gets the number
               char s[2] = ",";
               char *token = strtok(buf, s);
               while ( token != NULL && strcmp(token,"CON") != 0) {
@@ -328,19 +349,18 @@ int main (int argc, char *argv[]) {
               printf("Number guessed: %d\n", number);
 
               if (diceSum == number) {
-                send_message("%d,PASS", buf, client_fd, clientState.client_id);
+                sprintf(msg,"%s","%d,PASS");
               }
             } else if (clientState.nlives > 1) {
               // Sends fail but still in the game
               clientState.nlives--;
-              send_message("%d,FAIL", buf, client_fd, clientState.client_id);
+              sprintf(msg,"%s","%d,FAIL");
 
             } else if (clientState.nlives <= 1) {
               // Eliminate player from game
               clientState.nlives--;
-              send_message("%d,ELIM", buf, client_fd, clientState.client_id);
+              sprintf(msg,"%s","%d,ELIM");
               playersAlive--;
-              // Kick player from game
 
             } else if (clientState.nlives > 0 && playersAlive == 1) {
               // Check if no other players alive, win condition
@@ -349,6 +369,9 @@ int main (int argc, char *argv[]) {
 
             // Pipe Children -> Host, if they passed or died
             // Edgecase if they more than one person is eliminated and there's no on left both get vict
+
+            send_message(msg, client_fd, clientState.client_id);
+
 
         }
         printf("%d,%d,%d",gameStarted,nplayers,playersAlive);
