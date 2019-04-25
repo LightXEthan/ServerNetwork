@@ -18,12 +18,14 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <math.h>
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 1024
 
@@ -61,7 +63,6 @@ int main (int argc, char *argv[]) {
     bool host = false;
     bool gameStarted = false;
     int p1[2];
-    int p2[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -97,11 +98,9 @@ int main (int argc, char *argv[]) {
       exit(EXIT_FAILURE);
     }
 
-    // Second pipe if needed, check if game started
-    if (pipe(p2) < 0) {
-      fprintf(stderr,"Could not pipe\n");
-      exit(EXIT_FAILURE);
-    }
+    // Create shared memory to check if game has started
+    void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
+    memcpy(shmem, "GNS", 4);
 
     while (true) {
         socklen_t client_len = sizeof(client);
@@ -113,9 +112,7 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-
         // Create child process
-        // If game already started, the connection can be disconnected instead of being forked
         pid = fork();
         nplayers++;
         if (pid < 0) {
@@ -171,6 +168,11 @@ int main (int argc, char *argv[]) {
 
         // Game States, put this in a function later
         int playersAlive = 0;
+        fd_set set;
+
+        struct timeval timeout;
+        FD_ZERO(&set);
+        FD_SET(p1[0],&set);
 
         struct ClientState {
           int client_id;
@@ -181,11 +183,8 @@ int main (int argc, char *argv[]) {
         int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
         ERR_CHECK_READ;
 
-        // Checks if the game has started using pipe
-
         // Receives client request to enter game
-        if (strstr(buf, "INIT") && !gameStarted) {
-            // Fork somewhere here for multiplayer
+        if (strstr(buf, "INIT") && strstr(shmem, "GNS")) {
             int client_id = 230 + nplayers; // value of single player
             printf("INIT received, sending welcome.\n");
             buf[0] = '\0';
@@ -195,13 +194,11 @@ int main (int argc, char *argv[]) {
             // Creates clientStates
             clientState.client_id = client_id;
             clientState.nlives = 3;
+
         } else {
-            // Rejects when client connection is rejected,
-            // like when game already started
-            fprintf(stderr,"Client rejected\n");
-            buf[0] = '\0';
-            sprintf(buf, "REJECT");
-            err = send(client_fd, buf, strlen(buf), 0);
+            // Rejects when game has already started
+            err = send(client_fd, "REJECT", 6, 0);
+            ERR_CHECK_WRITE;
             exit(EXIT_FAILURE);
         }
 
@@ -212,8 +209,8 @@ int main (int argc, char *argv[]) {
         // Signals the start of the game
         // Pipe to all processes that the game as started
         char inbuf[13];
-        fd_set set;
-        struct timeval timeout;
+        timeout.tv_sec = 5; // Timeout time
+        timeout.tv_usec = 0;
 
         // Everyone says how many players they know
         buf[0] = '\0';
@@ -221,13 +218,10 @@ int main (int argc, char *argv[]) {
         write(p1[1], buf, sizeof(int));
 
         if (nplayers == 1) {
-          // This becomes the host
+          // This process becomes the host
           host = true;
+
           // Get number of players
-          FD_ZERO(&set);
-          FD_SET(p1[0],&set);
-          timeout.tv_sec = 5;
-          timeout.tv_usec = 0;
           int max = 0;
           printf("Game start initiated, counting players...\n");
 
@@ -237,8 +231,9 @@ int main (int argc, char *argv[]) {
             if (rv == -1) {
               perror("Error with select\n");
             } else if (rv == 0) {
+              // After timeout
               printf("Player count confirmed: %d\n", max);
-              write(p2[1],"STARTED",8); //Signals start of the game
+              memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
             } else {
               read(p1[0],inbuf,13);
