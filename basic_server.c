@@ -40,6 +40,8 @@ int send_message(char *msg, int client_fd, int client_id) {
   sprintf(buf, msg, client_id);
   int err = send(client_fd, buf, strlen(buf), 0);
   free(buf);
+
+  ///replace with ERR_CHECK_WRITE??
   if (err < 0) {
     fprintf(stderr,"Client write failed\n");
     exit(EXIT_FAILURE);
@@ -190,6 +192,8 @@ int main (int argc, char *argv[]) {
             buf[0] = '\0';
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
             err = send(client_fd, buf, strlen(buf), 0);
+            ERR_CHECK_WRITE;
+            
             playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;

@@ -25,7 +25,7 @@ THINGS TO DO:
 
 '''
 
-import socket
+import socket,sched,time
 from time import sleep
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -44,6 +44,23 @@ nlives = -1
 message = 'INIT'.encode()
 sock.sendall(message)
 
+
+# try to schedule an event which check connection with server periodically
+# got this error message -> TypeError: 'NoneType' object is not callable
+
+'''
+def check_connection():
+  # cannot either perform send or receive -> lost connection
+  if sock.sendall(b" ") is not None and sock.recv(1024) == 0:
+    print("Lost connection with server")
+    print ('closing socket')
+    sock.close()
+
+scheduler = sched.scheduler(time.time, time.sleep)
+scheduler.enter(5, 1, check_connection())
+scheduler.run()
+'''
+
 try:
     while True:
 
@@ -56,7 +73,13 @@ try:
         while amount_received < amount_expected:
             # if recv() return 0 bytes -> server close connection -> no more receive
             # receiving 0 bytes -> connection has been broken/indicate end of communication (closed socket cannot been reused)
+          
             data = sock.recv(1024)
+
+            if data == 0:
+              print("Lost connection with server")
+              exit = True
+
             amount_received += len(data)
             server_msg = data.decode()
             print("Recieved: " + server_msg)
@@ -111,28 +134,28 @@ try:
                 print("You lost, good game.")
                 # ascii art credit: http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
                 print('''
-                      ______      _____ _
-                     |  ____/\   |_   _| |
-                     | |__ /  \    | | | |
-                     |  __/ /\ \   | | | |
-                     | | / ____ \ _| |_| |____
-                     |_|/_/ ___\_\_____|______|
-                     \ \   / / __ \| |  | |
-                      \ \_/ / |  | | |  | |
-                       \   /| |  | | |  | |
-                        | | | |__| | |__| |
-                       _|_|_ \____/ \____/ _  __
-                      / ____| |  | |/ ____| |/ /
-                     | (___ | |  | | |    | ' /
-                      \___ \| |  | | |    |  <
-                      ____) | |__| | |____| . \\
-                     |_____/ \____/ \_____|_|\_\\
+            ______      _____ _
+           |  ____/\   |_   _| |
+           | |__ /  \    | | | |
+           |  __/ /\ \   | | | |
+           | | / ____ \ _| |_| |____
+           |_|/_/ ___\_\_____|______|
+           \ \   / / __ \| |  | |
+            \ \_/ / |  | | |  | |
+             \   /| |  | | |  | |
+              | | | |__| | |__| |
+             _|_|_ \____/ \____/ _  __
+            / ____| |  | |/ ____| |/ /
+           | (___ | |  | | |    | ' /
+            \___ \| |  | | |    |  <
+            ____) | |__| | |____| . \\
+           |_____/ \____/ \_____|_|\_\\
 
                                ''')
                 exit = True
                 break
 
-            elif "VICT" in server_msg:
+            elif "VICT" in server_msg or gameInfo[1] == 1:
                 # ascii art credit: https://www.asciiart.eu/computers/smileys
                 print('''
                          __          __  _____   _   _        _____
