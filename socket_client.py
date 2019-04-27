@@ -73,7 +73,7 @@ try:
         while amount_received < amount_expected:
             # if recv() return 0 bytes -> server close connection -> no more receive
             # receiving 0 bytes -> connection has been broken/indicate end of communication (closed socket cannot been reused)
-          
+
             data = sock.recv(1024)
 
             if data == 0:
@@ -98,19 +98,13 @@ try:
 
                 # first move
                 move = str(input("Your move: "))
-<<<<<<< HEAD
-                # sendall():continues to send data until either all data has been sent or an error occurs. None is returned on success.
-                # TODO: check exception??
-                sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) # Client has ID 231
-=======
-                ''' sendall():continues to send data until either all data has been sent or an error occurs. 
+                ''' sendall():continues to send data until either all data has been sent or an error occurs.
                 None is returned on success.
                 TODO: check exception??
-                send and recv: return when the associated network buffers have been filled (send) or emptied (recv). 
+                send and recv: return when the associated network buffers have been filled (send) or emptied (recv).
                 They then tell you how many bytes they handled.
                 '''
-                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode()) # Client has ID 231
->>>>>>> 02a693456c9cea3c21e90e199ce5ebc3bc7f2b68
+                sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) # Client has ID 231
 
             elif "PASS" in server_msg:
                 # make move
