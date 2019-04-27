@@ -75,7 +75,7 @@ try:
                 move = str(input("Your move: "))
                 # sendall():continues to send data until either all data has been sent or an error occurs. None is returned on success.
                 # TODO: check exception??
-                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode()) # Client has ID 231
+                sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) # Client has ID 231
 
             elif "PASS" in server_msg:
                 # make move
@@ -87,7 +87,7 @@ try:
                 ''')
                 print("Lives Left: " + str(nlives))
                 move = str(input("Your move: "))
-                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
+                sock.sendall("{0},MOV,{1}".format(client_id,move).encode())
 
             elif "FAIL" in server_msg:
                 nlives -= 1
@@ -99,7 +99,7 @@ try:
                         ''')
                 print("Lives Left: " + str(nlives))
                 move = str(input("Your move: "))
-                sock.sendall("{0},MOV,{1},0".format(client_id,move).encode())
+                sock.sendall("{0},MOV,{1}".format(client_id,move).encode())
 
             elif "ELIM" in server_msg:
                 print("You lost, good game.")
@@ -131,7 +131,7 @@ try:
                 print('''
                          __          __  _____   _   _        _____
                          \ \        / / |_   _| | \ | |     .'     '.
-                          \ \  /\  / /    | |   |  \| |    /  o   o  \
+                          \ \  /\  / /    | |   |  \| |    /  o   o  \\
                            \ \/  \/ /     | |   | . ` |   |           |
                             \  /\  /     _| |_  | |\  |   |  \     /  |
                              \/  \/     |_____| |_| \_|    \  '---'  /
