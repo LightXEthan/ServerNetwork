@@ -61,7 +61,6 @@ int main (int argc, char *argv[]) {
     int pid;
     int nplayers = 0;
     bool host = false;
-    bool gameStarted = false;
     int p1[2];
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -100,7 +99,7 @@ int main (int argc, char *argv[]) {
 
     // Create shared memory to check if game has started
     void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
-    memcpy(shmem, "GNS", 4);
+    memcpy(shmem, "GNS", 4); // Default value, game has not started
 
     while (true) {
         socklen_t client_len = sizeof(client);
@@ -193,7 +192,7 @@ int main (int argc, char *argv[]) {
             playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;
-            clientState.nlives = 3;
+            clientState.nlives = 2;
 
         } else {
             // Rejects when game has already started
@@ -202,7 +201,7 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        sleep(5); // Lobby wait time, 5 seconds
+
 
         // If not enough players in lobby, cancel game, Tier4
 
@@ -236,6 +235,7 @@ int main (int argc, char *argv[]) {
               memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
             } else {
+              printf("Player Joined.\n");
               read(p1[0],inbuf,13);
               // Gets the highest number which is the player count
               if (atoi(inbuf) > max) {
@@ -243,6 +243,7 @@ int main (int argc, char *argv[]) {
               }
             }
           }
+
           nplayers = max;
           // Check min number of players
           //printf("Game start!\n");
@@ -261,7 +262,7 @@ int main (int argc, char *argv[]) {
           nplayers = atoi(inbuf);
         }
         //printf("Number of players: %d\n",nplayers);
-        gameStarted = true;
+
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
 
@@ -273,19 +274,20 @@ int main (int argc, char *argv[]) {
 
             // Waits for move
             //printf("Waiting for input\n");
-            sleep(5); // TODO: implement time out time
-            memset(buf,0,BUFFER_SIZE);
+            //sleep(5); // TODO: implement time out time
+            buf[0] = '\0';
             rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
             ERR_CHECK_READ;
 
             printf("%s\n", buf);
             if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
                 fprintf(stderr, "Unexpected message, terminating\n");
+                free(buf);
                 exit(EXIT_FAILURE); //Kick player instead Tier4
             }
 
             // We have confirmed here that the player has moved
-            // Rolls the dice
+
             // Host process will roll dice
             int dice[2];
 
@@ -299,7 +301,6 @@ int main (int argc, char *argv[]) {
 
               // Pipe Host -> Children
               // Each child gets the dice
-
               for (int i = 0; i < nplayers - 1; i++) {
                 write(p1[1],&dice[0],sizeof(int));
                 write(p1[1],&dice[1],sizeof(int));
@@ -314,17 +315,18 @@ int main (int argc, char *argv[]) {
 
             // Calculate score using the players move
             char msg[8];
+
             if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
               // Doubles rolled and pass is sent
-              sprintf(msg,"%s","%d,PASS");
+              sprintf(msg, "%s", "%d,PASS");
 
             } else if (strstr(buf, "EVEN") && diceSum % 2 == 0 && dice[0] != dice[1]) {
               // Even rolled and pass is sent
-              sprintf(msg,"%s","%d,PASS");
+              sprintf(msg, "%s", "%d,PASS");
 
             } else if (strstr(buf, "ODD") && diceSum % 2 == 1 && diceSum > 5) {
               // Odd rolled above 5 and pass is sent
-              sprintf(msg,"%s","%d,PASS");
+              sprintf(msg, "%s", "%d,PASS");
 
             } else if (strstr(buf, "CON")) {
               // Choice from the player, below gets the number
@@ -344,37 +346,111 @@ int main (int argc, char *argv[]) {
               if (number == 0) {
                 // No number was selected
                 fprintf(stderr, "Player did not specify number.\n");
+                free(buf);
                 exit(EXIT_FAILURE); //Kick player instead Tier4
               }
               printf("Number guessed: %d\n", number);
 
               if (diceSum == number) {
-                sprintf(msg,"%s","%d,PASS");
+                sprintf(msg, "%s", "%d,PASS");
               }
+
             } else if (clientState.nlives > 1) {
               // Sends fail but still in the game
               clientState.nlives--;
-              sprintf(msg,"%s","%d,FAIL");
+              sprintf(msg, "%s", "%d,FAIL");
 
             } else if (clientState.nlives <= 1) {
               // Eliminate player from game
-              clientState.nlives--;
-              sprintf(msg,"%s","%d,ELIM");
-              playersAlive--;
-
-            } else if (clientState.nlives > 0 && playersAlive == 1) {
-              // Check if no other players alive, win condition
+              sprintf(msg, "%s", "%d,ELIM");
 
             }
 
-            // Pipe Children -> Host, if they passed or died
-            // Edgecase if they more than one person is eliminated and there's no on left both get vict
 
+            int b = write(p1[1], msg, 8);
+            //printf("Sent: %s, %d\n", msg, b);
+
+            sleep(3);
+            // Pipe Children -> Host, if they passed or died
+            if (host) {
+              // Receive msg
+              int elims = 0;
+              int fails = 0;
+              int pass = 0;
+              char rmsg[8];
+
+              // Count number of elims
+              FD_ZERO(&set);
+              FD_SET(p1[0],&set);
+              timeout.tv_sec = 1; // Timeout time
+              timeout.tv_usec = 0;
+
+              while (true) {
+                int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
+                if (rv == -1) {
+                  perror("Error with select\n");
+                } else if (rv == 0) {
+                  break; // After timeout
+
+                } else {
+                  rmsg[0] = '\0';
+                  int a = read(p1[0], rmsg, 8);
+                  //printf("Read: %s, %d\n", rmsg, a);
+                  if (a != 8) {
+                    printf("Memory error.\n");
+                  }
+
+                  // Count number of outcomes
+                  if (strstr(rmsg, "ELIM")) {
+                    elims++;
+                  } else if (strstr(rmsg, "PASS")) {
+                    pass++;
+                  } else if (strstr(rmsg, "FAIL")) {
+                    fails++;
+                  }
+                }
+              }
+
+              // Finds new number of playersAlive
+              nplayers = elims + pass + fails;
+              //printf("N: %d, %d, %d\n", elims, pass, fails);
+
+              // If everyone is elim, then everyone gets vict
+              if (elims == nplayers) {
+                nplayers = -1; // -1 when all players die, so everyone wins
+              }
+
+              // Send new player count
+              write(p1[1],&nplayers,sizeof(int));
+
+            } else {
+              read(p1[0], &nplayers, sizeof(int));
+              sleep(0.1);
+            }
+
+            if (nplayers == -1) {
+              // Everyone wins if all get eliminated
+              sprintf(msg, "%s", "%d,VICT");
+              //printf("msg: %s\n",msg);
+              send_message(msg, client_fd, clientState.client_id);
+              free(buf);
+              exit(EXIT_SUCCESS);
+
+            } else if (nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
+              // If one person alive then they get vict
+              printf("Victory Last alive. %d\n", nplayers);
+              sprintf(msg, "%s", "%d,VICT");
+              //printf("msg: %s\n",msg);
+              send_message(msg, client_fd, clientState.client_id);
+              free(buf);
+              exit(EXIT_SUCCESS);
+            }
+
+            printf("msg: %s\n",msg);
             send_message(msg, client_fd, clientState.client_id);
 
 
         }
-        printf("%d,%d,%d",gameStarted,nplayers,playersAlive);
         free(buf);
     }
 }
