@@ -103,6 +103,10 @@ int main (int argc, char *argv[]) {
     void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
     memcpy(shmem, "GNS", 4); // Default value, game has not started
 
+    // Create shared memory to check how many players there are
+    void* players = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
+    memcpy(players, &nplayers, sizeof(int)); // Default value, game has not started
+
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
@@ -186,13 +190,14 @@ int main (int argc, char *argv[]) {
 
         // Receives client request to enter game
         if (strstr(buf, "INIT") && strstr(shmem, "GNS")) {
-            int client_id = 230 + nplayers; // value of single player
+            int client_id = 230 + nplayers; // client id is dependent on number of players
             printf("INIT received, sending welcome.\n");
-            buf[0] = '\0';
+
+            memset(buf, 0, BUFFER_SIZE);
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
             err = send(client_fd, buf, strlen(buf), 0);
             ERR_CHECK_WRITE;
-            
+
             playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;
@@ -279,7 +284,7 @@ int main (int argc, char *argv[]) {
             // Waits for move
             //printf("Waiting for input\n");
             //sleep(5); // TODO: implement time out time
-            buf[0] = '\0';
+            memset(buf, 0, BUFFER_SIZE);
             rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
             ERR_CHECK_READ;
 
@@ -307,11 +312,14 @@ int main (int argc, char *argv[]) {
               // Each child gets the dice
               for (int i = 0; i < nplayers - 1; i++) {
                 write(p1[1],&dice[0],sizeof(int));
+                sleep(0.5);
                 write(p1[1],&dice[1],sizeof(int));
               }
+              sleep(2);
 
             } else {
               read(p1[0],&dice[0],sizeof(int));
+              sleep(0.5);
               read(p1[0],&dice[1],sizeof(int));
             }
 
@@ -319,6 +327,7 @@ int main (int argc, char *argv[]) {
 
             // Calculate score using the players move
             char msg[8];
+            memset(msg, 0, 8);
 
             if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
               // Doubles rolled and pass is sent
@@ -370,9 +379,8 @@ int main (int argc, char *argv[]) {
 
             }
 
-
-            int b = write(p1[1], msg, 8);
-            //printf("Sent: %s, %d\n", msg, b);
+            write(p1[1], msg, 9);
+            //printf("Wrote: %s %d\n", msg, a);
 
             sleep(3);
             // Pipe Children -> Host, if they passed or died
@@ -382,27 +390,27 @@ int main (int argc, char *argv[]) {
               int fails = 0;
               int pass = 0;
               char rmsg[8];
+              fd_set set2;
 
               // Count number of elims
-              FD_ZERO(&set);
-              FD_SET(p1[0],&set);
-              timeout.tv_sec = 1; // Timeout time
+              FD_ZERO(&set2);
+              FD_SET(p1[0],&set2);
+
               timeout.tv_usec = 0;
+              timeout.tv_sec = 3; // Timeout time
 
               while (true) {
-                int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
+                int rv = select(p1[0]+1, &set2, NULL, NULL, &timeout);
                 if (rv == -1) {
                   perror("Error with select\n");
                 } else if (rv == 0) {
                   break; // After timeout
 
                 } else {
-                  rmsg[0] = '\0';
+                  memset(rmsg, 0, 8);
+                  rmsg[8] = '\0';
                   int a = read(p1[0], rmsg, 8);
                   //printf("Read: %s, %d\n", rmsg, a);
-                  if (a != 8) {
-                    printf("Memory error.\n");
-                  }
 
                   // Count number of outcomes
                   if (strstr(rmsg, "ELIM")) {
@@ -421,18 +429,26 @@ int main (int argc, char *argv[]) {
 
               // If everyone is elim, then everyone gets vict
               if (elims == nplayers) {
-                nplayers = -1; // -1 when all players die, so everyone wins
+                nplayers = 0; // 0 when all players die, so everyone wins
+
+              } else {
+                nplayers -= elims;
               }
 
               // Send new player count
-              write(p1[1],&nplayers,sizeof(int));
+              memcpy(players, &nplayers, sizeof(int)); // Updates the player count
+              //printf("Sent new player count, %d\n", nplayers);
 
             } else {
-              read(p1[0], &nplayers, sizeof(int));
-              sleep(0.1);
+              // Clients that are not the host
+              sleep(nplayers * 2 + 1);
+              //printf("Reading\n");
+              memmove(&nplayers, players, sizeof(int));
+              //printf("Read: %d\n", nplayers);
+
             }
 
-            if (nplayers == -1) {
+            if (nplayers == 0) {
               // Everyone wins if all get eliminated
               sprintf(msg, "%s", "%d,VICT");
               //printf("msg: %s\n",msg);
