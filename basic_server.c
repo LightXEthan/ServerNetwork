@@ -113,6 +113,10 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
+        // Create host process
+        //hid = fork();
+
+
         // Create child process
         pid = fork();
         nplayers++;
@@ -293,6 +297,8 @@ int main (int argc, char *argv[]) {
 
             // Host process will roll dice
             int dice[2];
+            char dice1[3];
+            char dice2[3];
 
             if (host) {
               srand(time(0));
@@ -305,16 +311,20 @@ int main (int argc, char *argv[]) {
               // Pipe Host -> Children
               // Each child gets the dice
               for (int i = 0; i < nplayers - 1; i++) {
-                write(p1[1],&dice[0],sizeof(int));
-                sleep(0.5);
-                write(p1[1],&dice[1],sizeof(int));
+                sprintf(dice1, "%d", dice[0]);
+                write(p1[1],dice1,3);
+                sleep(0.1);
+                sprintf(dice2, "%d", dice[1]);
+                write(p1[1],dice2,3);
               }
               sleep(2);
 
             } else {
-              read(p1[0],&dice[0],sizeof(int));
-              sleep(0.5);
-              read(p1[0],&dice[1],sizeof(int));
+              read(p1[0],dice1,3);
+              dice[0] = atoi(dice1);
+              sleep(0.1);
+              read(p1[0],dice2,3);
+              dice[1] = atoi(dice2);
             }
 
             int diceSum = dice[0] + dice[1];
@@ -373,10 +383,10 @@ int main (int argc, char *argv[]) {
 
             }
 
+            // Send the result to the host
             write(p1[1], msg, 9);
-            //printf("Wrote: %s %d\n", msg, a);
+            sleep(5); // Round time
 
-            sleep(3);
             // Pipe Children -> Host, if they passed or died
             if (host) {
               // Receive msg
@@ -386,11 +396,10 @@ int main (int argc, char *argv[]) {
               int playersAlive = 0;
               char rmsg[8];
               fd_set set2;
-
-              // Count number of elims
               FD_ZERO(&set2);
               FD_SET(p1[0],&set2);
 
+              // Count number of each result
               timeout.tv_usec = 0;
               timeout.tv_sec = 0; // Timeout time
 
@@ -404,8 +413,8 @@ int main (int argc, char *argv[]) {
                 } else {
                   memset(rmsg, 0, 8);
                   rmsg[8] = '\0';
-                  read(p1[0], rmsg, 8);
-                  //printf("Read: %s, %d\n", rmsg, a);
+                  int a = read(p1[0], rmsg, 8);
+                  printf("Read: %s, %d\n", rmsg, a);
 
                   // Count number of outcomes
                   if (strstr(rmsg, "ELIM")) {
@@ -421,7 +430,7 @@ int main (int argc, char *argv[]) {
               // Finds new number of playersAlive
               nplayers = elims + pass + fails;
               playersAlive = nplayers;
-              //printf("N: %d, %d, %d\n", elims, pass, fails);
+              printf("N: %d, %d, %d\n", elims, pass, fails);
 
               // If everyone is elim, then everyone gets vict
               if (elims == nplayers) {
@@ -431,20 +440,24 @@ int main (int argc, char *argv[]) {
                 nplayers -= elims;
               }
 
-              // Send new player count
+              // Send new player count to each process
               //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
+              char np[5]; // Number of players in string, increase size of scaling
+              sprintf(np, "%d", nplayers);
               for (int i = 0; i < playersAlive - 1; i++) {
-                write(p1[1], &nplayers, sizeof(int));
+                write(p1[1], np, 5);
               }
 
-              //printf("Sent new player count, %d\n", nplayers);
+              printf("Sent new player count, %d\n", nplayers);
 
             } else {
               // Clients that are not the host
               sleep(2);
-              //printf("Reading\n");
-              read(p1[0], &nplayers, 8);
-              //printf("Read: %d\n", nplayers);
+              printf("Reading\n");
+              char np[5];
+              read(p1[0], np, 5);
+              nplayers = atoi(np);
+              printf("Read: %d\n", nplayers);
 
             }
 
