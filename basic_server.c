@@ -384,7 +384,7 @@ int main (int argc, char *argv[]) {
             }
 
             // Send the result to the host
-            write(p1[1], msg, 9);
+            write(p1[1], msg, 8);
             sleep(5); // Round time
 
             // Pipe Children -> Host, if they passed or died
@@ -442,20 +442,20 @@ int main (int argc, char *argv[]) {
 
               // Send new player count to each process
               //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
-              char np[5]; // Number of players in string, increase size of scaling
+              char np[8]; // Number of players in string, increase size of scaling
               sprintf(np, "%d", nplayers);
               for (int i = 0; i < playersAlive - 1; i++) {
-                write(p1[1], np, 5);
+                write(p1[1], np, 8);
               }
 
               printf("Sent new player count, %d\n", nplayers);
 
             } else {
               // Clients that are not the host
-              sleep(2);
+              sleep(4);
               printf("Reading\n");
-              char np[5];
-              read(p1[0], np, 5);
+              char np[8];
+              read(p1[0], np, 8);
               nplayers = atoi(np);
               printf("Read: %d\n", nplayers);
 
