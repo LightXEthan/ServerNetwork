@@ -103,10 +103,6 @@ int main (int argc, char *argv[]) {
     void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
     memcpy(shmem, "GNS", 4); // Default value, game has not started
 
-    // Create shared memory to check how many players there are
-    void* players = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
-    memcpy(players, &nplayers, sizeof(int)); // Default value, game has not started
-
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
@@ -172,7 +168,6 @@ int main (int argc, char *argv[]) {
         **/
 
         // Game States, put this in a function later
-        int playersAlive = 0;
         fd_set set;
 
         struct timeval timeout;
@@ -198,7 +193,6 @@ int main (int argc, char *argv[]) {
             err = send(client_fd, buf, strlen(buf), 0);
             ERR_CHECK_WRITE;
 
-            playersAlive++;
             // Creates clientStates
             clientState.client_id = client_id;
             clientState.nlives = 2;
@@ -389,6 +383,7 @@ int main (int argc, char *argv[]) {
               int elims = 0;
               int fails = 0;
               int pass = 0;
+              int playersAlive = 0;
               char rmsg[8];
               fd_set set2;
 
@@ -397,7 +392,7 @@ int main (int argc, char *argv[]) {
               FD_SET(p1[0],&set2);
 
               timeout.tv_usec = 0;
-              timeout.tv_sec = 3; // Timeout time
+              timeout.tv_sec = 0; // Timeout time
 
               while (true) {
                 int rv = select(p1[0]+1, &set2, NULL, NULL, &timeout);
@@ -409,7 +404,7 @@ int main (int argc, char *argv[]) {
                 } else {
                   memset(rmsg, 0, 8);
                   rmsg[8] = '\0';
-                  int a = read(p1[0], rmsg, 8);
+                  read(p1[0], rmsg, 8);
                   //printf("Read: %s, %d\n", rmsg, a);
 
                   // Count number of outcomes
@@ -425,6 +420,7 @@ int main (int argc, char *argv[]) {
 
               // Finds new number of playersAlive
               nplayers = elims + pass + fails;
+              playersAlive = nplayers;
               //printf("N: %d, %d, %d\n", elims, pass, fails);
 
               // If everyone is elim, then everyone gets vict
@@ -436,14 +432,18 @@ int main (int argc, char *argv[]) {
               }
 
               // Send new player count
-              memcpy(players, &nplayers, sizeof(int)); // Updates the player count
+              //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
+              for (int i = 0; i < playersAlive - 1; i++) {
+                write(p1[1], &nplayers, sizeof(int));
+              }
+
               //printf("Sent new player count, %d\n", nplayers);
 
             } else {
               // Clients that are not the host
-              sleep(nplayers * 2 + 1);
+              sleep(2);
               //printf("Reading\n");
-              memmove(&nplayers, players, sizeof(int));
+              read(p1[0], &nplayers, 8);
               //printf("Read: %d\n", nplayers);
 
             }
