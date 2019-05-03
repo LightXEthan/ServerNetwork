@@ -194,7 +194,7 @@ int main (int argc, char *argv[]) {
         /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
         char inbuf[13];
-        timeout.tv_sec = 5; // Timeout time
+        timeout.tv_sec = 10; // Timeout time
         timeout.tv_usec = 0;
 
         // Everyone send how many players they know to the pipe
@@ -208,7 +208,8 @@ int main (int argc, char *argv[]) {
 
           // Get number of players
           int max = 0;
-          printf("Game start initiated, counting players...\n");
+          memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
+          printf("Game has started, players can no longer join\nCounting players...\n");
 
           // Counts number of players
           while (true) {
@@ -217,7 +218,6 @@ int main (int argc, char *argv[]) {
               perror("Error with select\n");
             } else if (rv == 0) {//when timeout
               printf("Player count confirmed: %d\n", max);
-              memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
             } else {
               printf("Player Joined.\n");
@@ -269,11 +269,82 @@ int main (int argc, char *argv[]) {
             rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
             ERR_CHECK_READ;
 
+            // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
             printf("%s\n", buf);
             if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
                 fprintf(stderr, "Unexpected message, terminating\n");
                 free(buf);
                 exit(EXIT_FAILURE); //Kick player instead Tier4
+            }
+
+            char s[2] = ",";
+            char *tok = strtok(buf, s);
+            int counter = 0;
+            bool isCON = false;
+            int number; // Stores the number selected by the player
+            char action[5]; // Stores the action taken by the player
+            while ( tok != NULL) {
+              switch (counter) {
+                case 0:
+                  // Should be its own client id
+                  if (clientState.client_id != atoi(tok)) {
+                    // Kick for cheating
+                    printf("Kicked for cheating\n");
+                  }
+                  break;
+
+                case 1:
+                  // Should be MOV
+                  if (strcmp("MOV",tok) != 0) {
+                    // Kick for cheating
+                    printf("Kicked for cheating\n");
+                  }
+                  break;
+
+                case 2:
+                  // Should be a valid action
+                  if (strcmp(tok,"EVEN")==0) {
+                    sprintf(action,"EVEN");
+                  } else if (strcmp(tok,"ODD")==0) {
+                    sprintf(action,"ODD");
+                  } else if (strcmp(tok,"DOUB")==0) {
+                    sprintf(action,"DOUB");
+                  } else if (strcmp(tok,"CON")==0) {
+                    sprintf(action,"CON");
+                    isCON = true;
+                  } else {
+                    // kick for cheating
+                    printf("Kicked for cheating\n");
+                  }
+                  break;
+
+                case 3:
+                  // Should be a 2 digit int only iff move was CON
+                  if (isCON) {
+                    //tok[2] = '\0';
+                    number = atoi(tok);
+                    printf("Number: %d\n", number);
+                    if (number < 2 || 12 < number) {
+                      // Player entered invalid number
+                      fprintf(stderr, "Invalid number.\n");
+                      free(buf);
+                      exit(EXIT_FAILURE); //Kick player instead Tier4
+                    }
+                  } else {
+                    // kick for cheating
+                    printf("Kicked for cheating\n");
+                  }
+                  break;
+
+                default:
+                  // Kick for cheating
+                  printf("Kicked for cheating\n");
+                  free(buf);
+                  exit(EXIT_FAILURE); //Kick player instead Tier4
+
+              }
+              tok = strtok(NULL,s);
+              counter++;
             }
 
             // We have confirmed here that the player has moved
@@ -319,45 +390,21 @@ int main (int argc, char *argv[]) {
             // Calculate score using the players move
             char msg[8];
             memset(msg, 0, 8);
-
-            if (strstr(buf, "DOUB") && dice[0] == dice[1]) {
+            if (strcmp(action,"DOUB")==0 && dice[0] == dice[1]) {
               // Doubles rolled and pass is sent
               sprintf(msg, "%s", "%d,PASS");
 
-            } else if (strstr(buf, "EVEN") && diceSum % 2 == 0 && dice[0] != dice[1]) {
+            } else if (strcmp(action,"EVEN")==0 && diceSum % 2 == 0 && dice[0] != dice[1]) {
               // Even rolled and pass is sent
               sprintf(msg, "%s", "%d,PASS");
 
-            } else if (strstr(buf, "ODD") && diceSum % 2 == 1 && diceSum > 5) {
+            } else if (strcmp(action,"ODD")==0 && diceSum % 2 == 1 && diceSum > 5) {
               // Odd rolled above 5 and pass is sent
               sprintf(msg, "%s", "%d,PASS");
 
-            } else if (strstr(buf, "CON")) {
+            } else if (strcmp(action,"CON")==0 && diceSum == number) {
               // Choice from the player, below gets the number
-              char s[2] = ",";
-              char *token = strtok(buf, s);
-              while ( token != NULL && strcmp(token,"CON") != 0) {
-                token = strtok(NULL,s);
-              }
-              token = strtok(NULL,s);
-
-              if (isdigit(token[1])) {
-                token[2] = '\0';
-              } else {
-                token[1] = '\0';
-              }
-              int number = atoi(token);
-              if (number == 0) {
-                // No number was selected
-                fprintf(stderr, "Player did not specify number.\n");
-                free(buf);
-                exit(EXIT_FAILURE); //Kick player instead Tier4
-              }
-              printf("Number guessed: %d\n", number);
-
-              if (diceSum == number) {
-                sprintf(msg, "%s", "%d,PASS");
-              }
+              sprintf(msg, "%s", "%d,PASS");
 
             } else if (clientState.nlives > 1) {
               // Sends fail but still in the game
