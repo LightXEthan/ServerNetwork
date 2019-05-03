@@ -215,7 +215,7 @@ int main (int argc, char *argv[]) {
         // Signals the start of the game
         // Pipe to all processes that the game as started
         char inbuf[13];
-        timeout.tv_sec = 5; // Timeout time
+        timeout.tv_sec = 10; // Timeout time
         timeout.tv_usec = 0;
 
         // Everyone says how many players they know
@@ -229,7 +229,8 @@ int main (int argc, char *argv[]) {
 
           // Get number of players
           int max = 0;
-          printf("Game start initiated, counting players...\n");
+          memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
+          printf("Game has started, players can no longer join\nCounting players...\n");
 
           // Counts number of players
           while (true) {
@@ -239,7 +240,6 @@ int main (int argc, char *argv[]) {
             } else if (rv == 0) {
               // After timeout
               printf("Player count confirmed: %d\n", max);
-              memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
             } else {
               printf("Player Joined.\n");
@@ -353,8 +353,6 @@ int main (int argc, char *argv[]) {
                   }
                   break;
 
-                case 4:
-                  printf("Kicked for cheating\n");
                 default:
                   // Kick for cheating
                   printf("Kicked for cheating\n");
