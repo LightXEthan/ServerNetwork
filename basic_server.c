@@ -33,6 +33,8 @@
 #define ERR_CHECK_READ if (rec < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
 #define MIN_PLAYERS 2
 
+//FUNCTIONS
+/*----------------------------------------------------------------------------------------*/
 // Sends message to clients
 int send_message(char *msg, int client_fd, int client_id) {
   char *buf = calloc(BUFFER_SIZE, sizeof(char));
@@ -41,22 +43,21 @@ int send_message(char *msg, int client_fd, int client_id) {
   int err = send(client_fd, buf, strlen(buf), 0);
   free(buf);
 
-  ///replace with ERR_CHECK_WRITE??
-  if (err < 0) {
-    fprintf(stderr,"Client write failed\n");
-    exit(EXIT_FAILURE);
-  }
+  ERR_CHECK_WRITE;
+  
   return 1;
 }
 
+//MAIN
+/*----------------------------------------------------------------------------------------*/
 int main (int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr,"Usage: %s [port]\n",argv[0]);
-        exit(EXIT_FAILURE);
+
+    if (argc < 2){
+      fprintf(stderr,"Usage: %s [port]\n",argv[0]);
+      exit(EXIT_FAILURE);
     }
 
     int port = atoi(argv[1]);
-
     int server_fd, client_fd, err, opt_val;
     struct sockaddr_in server, client;
     char *buf;
@@ -65,11 +66,13 @@ int main (int argc, char *argv[]) {
     bool host = false;
     int p1[2];
 
+    //CREATE SOCKET, SET, BIND, LISTEN
+    /*----------------------------------------------------------------------------------------*/
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_fd < 0){
-        fprintf(stderr,"Could not create socket\n");
-        exit(EXIT_FAILURE);
+      fprintf(stderr,"Could not create socket\n");
+      exit(EXIT_FAILURE);
     }
 
     server.sin_family = AF_INET;
@@ -81,18 +84,21 @@ int main (int argc, char *argv[]) {
 
     err = bind(server_fd, (struct sockaddr *) &server, sizeof(server));
     if (err < 0){
-        fprintf(stderr,"Could not bind socket\n");
-        exit(EXIT_FAILURE);
+      fprintf(stderr,"Could not bind socket\n");
+      exit(EXIT_FAILURE);
     }
 
     err = listen(server_fd, 128);
     if (err < 0){
-        fprintf(stderr,"Could not listen on socket\n");
-        exit(EXIT_FAILURE);
+      fprintf(stderr,"Could not listen on socket\n");
+      exit(EXIT_FAILURE);
     }
 
     printf("Server is listening on %d\n", port);
 
+
+    //PIPE & SHARED MEMORY
+    /*----------------------------------------------------------------------------------------*/
     // Setup Pipe for inter-process communication
     if (pipe(p1) < 0) {
       fprintf(stderr,"Could not pipe\n");
@@ -103,21 +109,25 @@ int main (int argc, char *argv[]) {
     void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
     memcpy(shmem, "GNS", 4); // Default value, game has not started
 
+
+    //MAIN LOOP
+    /*----------------------------------------------------------------------------------------*/
     while (true) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
         client_fd = accept(server_fd, (struct sockaddr *) &client, &client_len);
 
         if (client_fd < 0) {
-            fprintf(stderr,"Could not establish new connection\n");
-            exit(EXIT_FAILURE);
+          fprintf(stderr,"Could not establish new connection\n");
+          exit(EXIT_FAILURE);
         }
 
         // Create host process
         //hid = fork();
 
 
-        // Create child process
+        //FORK OUT CHILD PROCESSES
+        /*----------------------------------------------------------------------------------------*/
         pid = fork();
         nplayers++;
         if (pid < 0) {
@@ -130,48 +140,13 @@ int main (int argc, char *argv[]) {
           close(server_fd);
 
         } else {
-          // Parent process, will loop back and wait for another connection
+          // Parent process, will loop back to accept() and wait for another connection
           close(client_fd);
           continue;
         }
 
-        /**
-        The following while loop contains some basic code that sends messages back and forth
-        between a client (e.g. the socket_client.py client).
-
-        The majority of the server 'action' will happen in this part of the code (unless you decide
-        to change this dramatically, which is allowed). The following function names/definitions will
-        hopefully provide inspiration for how you can start to build up the functionality of the server.
-
-        parse_message(char *){...} :
-            * This would be a good 'general' function that reads a message from a client and then
-            determines what the required response is; is the client connecting, making a move, etc.
-            * It may be useful having an enum that is used to track what type of client message is received
-            (e.g. CONNECT/MOVE etc.)
-
-        send_message() {...}:
-            * This would send responses based on what the client has sent through, or if the server needs
-            to send all clients messages
-
-        play_game_round() {...}: Implements the functionality for a round of the game
-            * 'Roll' the dice (using a random number generator) and then check if the move made by the user
-            is correct
-            * update game state depending on success or failure.
-
-        setup_game/teardown_game() {} :
-            * this will set up the initial state of the game (number of rounds, players
-            etc.)/ print out final game results and cancel socket connections.
-
-        Accepting multiple connections (we recommend not starting this until after implementing some
-        of the basic message parsing/game playing):
-            * Whilst in a while loop
-                - Accept a new connection
-                - Create a child process
-                - In the child process (which is associated with client), perform game_playing functionality
-                (or read the messages)
-        **/
-
-        // Game States, put this in a function later
+        //VARIABLES
+        /*----------------------------------------------------------------------------------------*/
         fd_set set;
 
         struct timeval timeout;
@@ -183,10 +158,16 @@ int main (int argc, char *argv[]) {
           int nlives;
         } clientState;
 
+
+        //START READING MESSAGE FROM CLIENTS       
+        /*----------------------------------------------------------------------------------------*/
         buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
         int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
         ERR_CHECK_READ;
 
+
+        //INIT & REJECT
+        /*----------------------------------------------------------------------------------------*/
         // Receives client request to enter game
         if (strstr(buf, "INIT") && strstr(shmem, "GNS")) {
             int client_id = 230 + nplayers; // client id is dependent on number of players
@@ -209,16 +190,14 @@ int main (int argc, char *argv[]) {
         }
 
 
-
-        // If not enough players in lobby, cancel game, Tier4
-
-        // Signals the start of the game
+        //COUNTING PLAYERS & TIMEOUT & DECIDE START OR CANCEL
+        /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
         char inbuf[13];
         timeout.tv_sec = 5; // Timeout time
         timeout.tv_usec = 0;
 
-        // Everyone says how many players they know
+        // Everyone send how many players they know to the pipe
         buf[0] = '\0';
         sprintf(buf, "%d",nplayers);
         write(p1[1], buf, sizeof(int));
@@ -236,8 +215,7 @@ int main (int argc, char *argv[]) {
             int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
             if (rv == -1) {
               perror("Error with select\n");
-            } else if (rv == 0) {
-              // After timeout
+            } else if (rv == 0) {//when timeout
               printf("Player count confirmed: %d\n", max);
               memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
               break;
@@ -255,7 +233,7 @@ int main (int argc, char *argv[]) {
           // Check min number of players
           //printf("Game start!\n");
 
-          // Start the game, send info to players, Each child gets the number of players
+          // Start the game, host sends number of players to players
           buf[0] = '\0';
           sprintf(buf, "%d",nplayers);
 
@@ -270,13 +248,18 @@ int main (int argc, char *argv[]) {
         }
         //printf("Number of players: %d\n",nplayers);
 
+
+        //SIGNAL START
+        /*----------------------------------------------------------------------------------------*/
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
 
         err = send(client_fd, buf, strlen(buf), 0); // Send another thing
         ERR_CHECK_WRITE;
 
-        // Loops each game round
+
+        //LOOP EACH GAME ROUND
+        /*----------------------------------------------------------------------------------------*/
         while (true) {
 
             // Waits for move
@@ -295,7 +278,8 @@ int main (int argc, char *argv[]) {
 
             // We have confirmed here that the player has moved
 
-            // Host process will roll dice
+            //HOST ROLL THE DICE
+            /*----------------------------------------------------------------------------------------*/ 
             int dice[2];
             char dice1[3];
             char dice2[3];
@@ -308,7 +292,7 @@ int main (int argc, char *argv[]) {
               printf("Dice one roll: %d\n",dice[0]);
               printf("Dice two roll: %d\n",dice[1]);
 
-              // Pipe Host -> Children
+              // Host pipes dice roll to other players
               // Each child gets the dice
               for (int i = 0; i < nplayers - 1; i++) {
                 sprintf(dice1, "%d", dice[0]);
@@ -329,6 +313,9 @@ int main (int argc, char *argv[]) {
 
             int diceSum = dice[0] + dice[1];
 
+
+            //DECIDE PASS, FAIL, ELIM         
+            /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
             char msg[8];
             memset(msg, 0, 8);
@@ -383,10 +370,13 @@ int main (int argc, char *argv[]) {
 
             }
 
-            // Send the result to the host
+            //HOST MANAGE GAME RESULT
+            /*----------------------------------------------------------------------------------------*/
+            // players send the result to the host
             write(p1[1], msg, 8);
             sleep(5); // Round time
 
+            // Host collects info for each round and determine outcome
             // Pipe Children -> Host, if they passed or died
             if (host) {
               // Receive msg
@@ -440,6 +430,8 @@ int main (int argc, char *argv[]) {
                 nplayers -= elims;
               }
 
+              //HOST BROADCAST NEW NO.PLAYERS
+              /*----------------------------------------------------------------------------------------*/
               // Send new player count to each process
               //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
               char np[8]; // Number of players in string, increase size of scaling
@@ -450,6 +442,8 @@ int main (int argc, char *argv[]) {
 
               printf("Sent new player count, %d\n", nplayers);
 
+              //PLAYERS' UPDATE
+              /*----------------------------------------------------------------------------------------*/
             } else {
               // Clients that are not the host
               sleep(4);
@@ -461,6 +455,8 @@ int main (int argc, char *argv[]) {
 
             }
 
+            //WIN CONDITIONS
+            /*----------------------------------------------------------------------------------------*/
             if (nplayers == 0) {
               // Everyone wins if all get eliminated
               sprintf(msg, "%s", "%d,VICT");
