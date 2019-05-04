@@ -28,6 +28,7 @@
 #include <fcntl.h>
 
 #define BUFFER_SIZE 1024
+#define PIPE_BUFF_SIZE 14
 
 #define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
 #define ERR_CHECK_READ if (rec < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
@@ -61,7 +62,7 @@ int main (int argc, char *argv[]) {
     int server_fd, client_fd, err, opt_val;
     struct sockaddr_in server, client;
     char *buf;
-    int pid;
+    int pid, hid;
     int nplayers = 0;
     bool host = false;
     int p1[2];
@@ -116,15 +117,17 @@ int main (int argc, char *argv[]) {
       fprintf(stderr,"Could not fork\n");
       exit(EXIT_FAILURE);
     } else if (hid == 0) {
-      // Child process
-    } else {
-      // Parent process, will become host
+      // Child process, will become host
+      close(server_fd);
+      close(client_fd);
       host = true;
     }
+    // Parent process will continue
+
 
     //MAIN LOOP
     /*----------------------------------------------------------------------------------------*/
-    while (true) {
+    while (!host) {
         socklen_t client_len = sizeof(client);
         // Will block until a connection is made
         client_fd = accept(server_fd, (struct sockaddr *) &client, &client_len);
@@ -157,12 +160,7 @@ int main (int argc, char *argv[]) {
 
         //VARIABLES
         /*----------------------------------------------------------------------------------------*/
-        fd_set set;
-
-        struct timeval timeout;
-        FD_ZERO(&set);
-        FD_SET(p1[0],&set);
-
+        int round = 0;
         struct ClientState {
           int client_id;
           int nlives;
@@ -199,65 +197,20 @@ int main (int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-
         //COUNTING PLAYERS & TIMEOUT & DECIDE START OR CANCEL
         /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
         char inbuf[13];
-        timeout.tv_sec = 10; // Timeout time
-        timeout.tv_usec = 0;
 
         // Everyone send how many players they know to the pipe
         buf[0] = '\0';
         sprintf(buf, "%d",nplayers);
-        write(p1[1], buf, sizeof(int));
-
-        if (nplayers == 1) {
-          // This process becomes the host
-          host = true;
-
-          // Get number of players
-          int max = 0;
-          memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
-          printf("Game has started, players can no longer join\nCounting players...\n");
-
-          // Counts number of players
-          while (true) {
-            int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
-            if (rv == -1) {
-              perror("Error with select\n");
-            } else if (rv == 0) {//when timeout
-              printf("Player count confirmed: %d\n", max);
-              break;
-            } else {
-              printf("Player Joined.\n");
-              read(p1[0],inbuf,13);
-              // Gets the highest number which is the player count
-              if (atoi(inbuf) > max) {
-                max = atoi(inbuf);
-              }
-            }
-          }
-
-          nplayers = max;
-          // Check min number of players
-          //printf("Game start!\n");
-
-          // Start the game, host sends number of players to players
-          buf[0] = '\0';
-          sprintf(buf, "%d",nplayers);
-
-          for (int i = 0; i < nplayers - 1; i++) {
-            write(p1[1], buf, sizeof(int));
-          }
-
-        } else {
-          sleep(1);
-          read(p1[0],inbuf,sizeof(int));
-          nplayers = atoi(inbuf);
-        }
-        //printf("Number of players: %d\n",nplayers);
-
+        write(p1[1], buf, PIPE_BUFF_SIZE);
+        printf("Client Wrote\n");
+        sleep(1);
+        read(p1[0],inbuf, PIPE_BUFF_SIZE);
+        nplayers = atoi(inbuf);
+        printf("Read from host: %d\n", nplayers);
 
         //SIGNAL START
         /*----------------------------------------------------------------------------------------*/
@@ -271,10 +224,23 @@ int main (int argc, char *argv[]) {
         //LOOP EACH GAME ROUND
         /*----------------------------------------------------------------------------------------*/
         while (true) {
+            round++;
+            //CLIENT READS THE DICE FROM HOST
+            /*----------------------------------------------------------------------------------------*/
+            int dice[2];
+            char dice1[3];
+            char dice2[3];
 
-            // Waits for move
-            //printf("Waiting for input\n");
-            //sleep(5); // TODO: implement time out time
+            read(p1[0],dice1,PIPE_BUFF_SIZE);
+            dice[0] = atoi(dice1);
+            sleep(0.1);
+            read(p1[0],dice2,PIPE_BUFF_SIZE);
+            dice[1] = atoi(dice2);
+            printf("Client Dice read\n");
+
+            int diceSum = dice[0] + dice[1];
+            sleep(1);
+            // Waits for move from player
             memset(buf, 0, BUFFER_SIZE);
             rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
             ERR_CHECK_READ;
@@ -293,6 +259,7 @@ int main (int argc, char *argv[]) {
             bool isCON = false;
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
+            // Scans the whole packet
             while ( tok != NULL) {
               switch (counter) {
                 case 0:
@@ -357,44 +324,6 @@ int main (int argc, char *argv[]) {
               counter++;
             }
 
-            // We have confirmed here that the player has moved
-
-            //HOST ROLL THE DICE
-            /*----------------------------------------------------------------------------------------*/
-            int dice[2];
-            char dice1[3];
-            char dice2[3];
-
-            if (host) {
-              srand(time(0));
-              dice[0] = rand() % 6 + 1;
-              dice[1] = rand() % 6 + 1;
-
-              printf("Dice one roll: %d\n",dice[0]);
-              printf("Dice two roll: %d\n",dice[1]);
-
-              // Host pipes dice roll to other players
-              // Each child gets the dice
-              for (int i = 0; i < nplayers - 1; i++) {
-                sprintf(dice1, "%d", dice[0]);
-                write(p1[1],dice1,3);
-                sleep(0.1);
-                sprintf(dice2, "%d", dice[1]);
-                write(p1[1],dice2,3);
-              }
-              sleep(2);
-
-            } else {
-              read(p1[0],dice1,3);
-              dice[0] = atoi(dice1);
-              sleep(0.1);
-              read(p1[0],dice2,3);
-              dice[1] = atoi(dice2);
-            }
-
-            int diceSum = dice[0] + dice[1];
-
-
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
@@ -427,90 +356,17 @@ int main (int argc, char *argv[]) {
 
             }
 
-            //HOST MANAGE GAME RESULT
-            /*----------------------------------------------------------------------------------------*/
             // players send the result to the host
-            write(p1[1], msg, 8);
-            sleep(5); // Round time
+            write(p1[1], msg, PIPE_BUFF_SIZE);
 
-            // Host collects info for each round and determine outcome
-            // Pipe Children -> Host, if they passed or died
-            if (host) {
-              // Receive msg
-              int elims = 0;
-              int fails = 0;
-              int pass = 0;
-              int playersAlive = 0;
-              char rmsg[8];
-              fd_set set2;
-              FD_ZERO(&set2);
-              FD_SET(p1[0],&set2);
-
-              // Count number of each result
-              timeout.tv_usec = 0;
-              timeout.tv_sec = 0; // Timeout time
-
-              while (true) {
-                int rv = select(p1[0]+1, &set2, NULL, NULL, &timeout);
-                if (rv == -1) {
-                  perror("Error with select\n");
-                } else if (rv == 0) {
-                  break; // After timeout
-
-                } else {
-                  memset(rmsg, 0, 8);
-                  rmsg[8] = '\0';
-                  int a = read(p1[0], rmsg, 8);
-                  printf("Read: %s, %d\n", rmsg, a);
-
-                  // Count number of outcomes
-                  if (strstr(rmsg, "ELIM")) {
-                    elims++;
-                  } else if (strstr(rmsg, "PASS")) {
-                    pass++;
-                  } else if (strstr(rmsg, "FAIL")) {
-                    fails++;
-                  }
-                }
-              }
-
-              // Finds new number of playersAlive
-              nplayers = elims + pass + fails;
-              playersAlive = nplayers;
-              printf("N: %d, %d, %d\n", elims, pass, fails);
-
-              // If everyone is elim, then everyone gets vict
-              if (elims == nplayers) {
-                nplayers = 0; // 0 when all players die, so everyone wins
-
-              } else {
-                nplayers -= elims;
-              }
-
-              //HOST BROADCAST NEW NO.PLAYERS
-              /*----------------------------------------------------------------------------------------*/
-              // Send new player count to each process
-              //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
-              char np[8]; // Number of players in string, increase size of scaling
-              sprintf(np, "%d", nplayers);
-              for (int i = 0; i < playersAlive - 1; i++) {
-                write(p1[1], np, 8);
-              }
-
-              printf("Sent new player count, %d\n", nplayers);
-
-              //PLAYERS' UPDATE
-              /*----------------------------------------------------------------------------------------*/
-            } else {
-              // Clients that are not the host
-              sleep(4);
-              printf("Reading\n");
-              char np[8];
-              read(p1[0], np, 8);
-              nplayers = atoi(np);
-              printf("Read: %d\n", nplayers);
-
-            }
+            //PLAYERS' UPDATE
+            /*----------------------------------------------------------------------------------------*/
+            sleep(2);
+            printf("Reading\n");
+            char np[8];
+            read(p1[0], np, PIPE_BUFF_SIZE);
+            nplayers = atoi(np);
+            printf("Client nplayers Read: %d\n", nplayers);
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
@@ -538,5 +394,159 @@ int main (int argc, char *argv[]) {
 
         }
         free(buf);
+    }
+    // End of while Loop
+    // HOST CODE
+    /*----------------------------------------------------------------------------------------*/
+    if (host) {
+      printf("Host is setting up game.\n");
+      fd_set set;
+
+      struct timeval timeout;
+      FD_ZERO(&set);
+      FD_SET(p1[0],&set);
+      timeout.tv_sec = 10; // Timeout time
+      timeout.tv_usec = 0;
+      char inbuf[13];
+
+      // Get number of players
+      int max = 0;
+
+      printf("Lobby open...\n");
+
+      // Counts number of players
+      while (true) {
+        int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
+        if (rv == -1) {
+          perror("Error with select\n");
+        } else if (rv == 0) {//when timeout
+          memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
+          printf("Players can no longer join.\nNumber of players: %d\n", max);
+          break;
+        } else {
+          printf("Player Joined.\n");
+          read(p1[0],inbuf,PIPE_BUFF_SIZE);
+          // Gets the highest number which is the player count
+          if (atoi(inbuf) > max) {
+            max = atoi(inbuf);
+          }
+        }
+      }
+
+      nplayers = max;
+      // Check min number of players
+      //printf("Game start!\n");
+
+      // Start the game, host sends number of players to players
+      buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
+      buf[0] = '\0';
+      sprintf(buf, "%d",nplayers);
+
+      for (int i = 0; i < nplayers; i++) {
+        printf("Host sent players: %d\n", nplayers);
+        write(p1[1], buf, PIPE_BUFF_SIZE);
+      }
+      sleep(3);
+
+      // Roll the dice
+      /*----------------------------------------------------------------------------------------*/
+      while (true) {
+        int dice[2];
+        char dice1[3];
+        char dice2[3];
+
+        srand(time(0));
+        dice[0] = rand() % 6 + 1;
+        dice[1] = rand() % 6 + 1;
+
+        printf("Dice one roll: %d\n",dice[0]);
+        printf("Dice two roll: %d\n",dice[1]);
+
+        // Host pipes dice roll to other players
+        // Each child gets the dice
+        for (int i = 0; i < nplayers; i++) {
+          sprintf(dice1, "%d", dice[0]);
+          write(p1[1],dice1,PIPE_BUFF_SIZE);
+          sleep(0.1);
+          sprintf(dice2, "%d", dice[1]);
+          write(p1[1],dice2,PIPE_BUFF_SIZE);
+        }
+        sleep(1);
+
+        //HOST MANAGE GAME RESULT
+        /*----------------------------------------------------------------------------------------*/
+        // Pipe Children -> Host, if they passed or died
+        // Host collects info for each round and determine outcome
+        int elims = 0;
+        int fails = 0;
+        int pass = 0;
+        int playersAlive = 0;
+        char rmsg[8];
+        fd_set set2;
+        FD_ZERO(&set2);
+        FD_SET(p1[0],&set2);
+
+        // Count number of each result
+        timeout.tv_usec = 0;
+        timeout.tv_sec = 10; // Timeout time
+
+        printf("Host: Waiting for player actions.\n");
+        while (true) {
+          int rv = select(p1[0]+1, &set2, NULL, NULL, &timeout);
+          if (rv == -1) {
+            perror("Host: Error with select\n");
+          } else if (rv == 0) {
+            printf("Host: Round Ended.\n");
+            break; // After timeout
+
+          } else {
+            memset(rmsg, 0, 8);
+            rmsg[8] = '\0';
+            int a = read(p1[0], rmsg, PIPE_BUFF_SIZE);
+            printf("Host Read: %s\n", rmsg);
+
+            // Count number of outcomes
+            if (strstr(rmsg, "ELIM")) {
+              elims++;
+            } else if (strstr(rmsg, "PASS")) {
+              pass++;
+            } else if (strstr(rmsg, "FAIL")) {
+              fails++;
+            }
+          }
+        }
+
+        // Finds new number of playersAlive
+        nplayers = elims + pass + fails;
+        playersAlive = nplayers;
+        printf("Host N: %d, %d, %d\n", elims, pass, fails);
+
+        // If everyone is elim, then everyone gets vict
+        if (elims == nplayers) {
+          nplayers = 0; // 0 when all players die, so everyone wins
+
+        } else {
+          nplayers -= elims;
+        }
+
+        //HOST BROADCAST NEW NO.PLAYERS
+        /*----------------------------------------------------------------------------------------*/
+        // Send new player count to each process
+        //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
+        char np[8]; // Number of players in string, increase size of scaling
+        sprintf(np, "%d", nplayers);
+        for (int i = 0; i < playersAlive; i++) {
+          write(p1[1], np, PIPE_BUFF_SIZE);
+        }
+
+        printf("Sent new player count, %d\n", nplayers);
+        if (nplayers <= 1) {
+          // End game
+          // Kill the parent?
+          free(buf);
+          exit(EXIT_SUCCESS);
+        }
+
+      }
     }
 }
