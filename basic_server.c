@@ -109,19 +109,6 @@ int main (int argc, char *argv[]) {
     void* shmem = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
     memcpy(shmem, "GNS", 4); // Default value, game has not started
 
-    // Create host process
-    hid = fork();
-
-    if (hid < 0) {
-      fprintf(stderr,"Could not fork\n");
-      exit(EXIT_FAILURE);
-    } else if (hid == 0) {
-      // Child process
-    } else {
-      // Parent process, will become host
-      host = true;
-    }
-
     //MAIN LOOP
     /*----------------------------------------------------------------------------------------*/
     while (true) {
