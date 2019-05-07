@@ -49,6 +49,86 @@ int send_message(char *msg, int client_fd, int client_id) {
   return 1;
 }
 
+/*----------------------------------------------------------------------------------------*/
+// Anti-Cheat function
+void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
+  if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
+      fprintf(stderr, "Unexpected message, terminating\n");
+      free(buf);
+      exit(EXIT_FAILURE); //Kick player instead Tier4
+  }
+
+  char s[2] = ",";
+  char *tok = strtok(buf, s);
+  int counter = 0;
+  bool isCON = false;
+  //char action[5]; // Stores the action taken by the player
+  // Scans the whole packet
+  while ( tok != NULL) {
+    switch (counter) {
+      case 0:
+        // Should be its own client id
+        if (client_id != atoi(tok)) {
+          // Kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 1:
+        // Should be MOV
+        if (strcmp("MOV",tok) != 0) {
+          // Kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 2:
+        // Should be a valid action
+        if (strcmp(tok,"EVEN")==0) {
+          sprintf(*action,"EVEN");
+        } else if (strcmp(tok,"ODD")==0) {
+          sprintf(*action,"ODD");
+        } else if (strcmp(tok,"DOUB")==0) {
+          sprintf(*action,"DOUB");
+        } else if (strcmp(tok,"CON")==0) {
+          sprintf(*action,"CON");
+          isCON = true;
+        } else {
+          // kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 3:
+        // Should be a 2 digit int only iff move was CON
+        if (isCON) {
+          //tok[2] = '\0';
+          *number = atoi(tok);
+          printf("Number: %d\n", *number);
+          if (*number < 2 || 12 < *number) {
+            // Player entered invalid number
+            fprintf(stderr, "Invalid number.\n");
+            free(buf);
+            exit(EXIT_FAILURE); //Kick player instead Tier4
+          }
+        } else {
+          // kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      default:
+        // Kick for cheating
+        printf("Kicked for cheating\n");
+        free(buf);
+        exit(EXIT_FAILURE); //Kick player instead Tier4
+
+    }
+    tok = strtok(NULL,s);
+    counter++;
+  }
+}
+
 //MAIN
 /*----------------------------------------------------------------------------------------*/
 int main (int argc, char *argv[]) {
@@ -119,7 +199,6 @@ int main (int argc, char *argv[]) {
     } else if (hid == 0) {
       // Child process, will become host
       close(server_fd);
-      close(client_fd);
       host = true;
     }
     // Parent process will continue
@@ -136,7 +215,6 @@ int main (int argc, char *argv[]) {
           fprintf(stderr,"Could not establish new connection\n");
           exit(EXIT_FAILURE);
         }
-
 
 
         //FORK OUT CHILD PROCESSES
@@ -247,82 +325,9 @@ int main (int argc, char *argv[]) {
 
             // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
             printf("%s\n", buf);
-            if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
-                fprintf(stderr, "Unexpected message, terminating\n");
-                free(buf);
-                exit(EXIT_FAILURE); //Kick player instead Tier4
-            }
-
-            char s[2] = ",";
-            char *tok = strtok(buf, s);
-            int counter = 0;
-            bool isCON = false;
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
-            // Scans the whole packet
-            while ( tok != NULL) {
-              switch (counter) {
-                case 0:
-                  // Should be its own client id
-                  if (clientState.client_id != atoi(tok)) {
-                    // Kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 1:
-                  // Should be MOV
-                  if (strcmp("MOV",tok) != 0) {
-                    // Kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 2:
-                  // Should be a valid action
-                  if (strcmp(tok,"EVEN")==0) {
-                    sprintf(action,"EVEN");
-                  } else if (strcmp(tok,"ODD")==0) {
-                    sprintf(action,"ODD");
-                  } else if (strcmp(tok,"DOUB")==0) {
-                    sprintf(action,"DOUB");
-                  } else if (strcmp(tok,"CON")==0) {
-                    sprintf(action,"CON");
-                    isCON = true;
-                  } else {
-                    // kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 3:
-                  // Should be a 2 digit int only iff move was CON
-                  if (isCON) {
-                    //tok[2] = '\0';
-                    number = atoi(tok);
-                    printf("Number: %d\n", number);
-                    if (number < 2 || 12 < number) {
-                      // Player entered invalid number
-                      fprintf(stderr, "Invalid number.\n");
-                      free(buf);
-                      exit(EXIT_FAILURE); //Kick player instead Tier4
-                    }
-                  } else {
-                    // kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                default:
-                  // Kick for cheating
-                  printf("Kicked for cheating\n");
-                  free(buf);
-                  exit(EXIT_FAILURE); //Kick player instead Tier4
-
-              }
-              tok = strtok(NULL,s);
-              counter++;
-            }
+            watch_dog(buf, clientState.client_id, &number, &action);
 
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
@@ -502,7 +507,7 @@ int main (int argc, char *argv[]) {
           } else {
             memset(rmsg, 0, 8);
             rmsg[8] = '\0';
-            int a = read(p1[0], rmsg, PIPE_BUFF_SIZE);
+            read(p1[0], rmsg, PIPE_BUFF_SIZE);
             printf("Host Read: %s\n", rmsg);
 
             // Count number of outcomes
@@ -532,7 +537,6 @@ int main (int argc, char *argv[]) {
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
         // Send new player count to each process
-        //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
         char np[8]; // Number of players in string, increase size of scaling
         sprintf(np, "%d", nplayers);
         for (int i = 0; i < playersAlive; i++) {
