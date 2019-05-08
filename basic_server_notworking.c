@@ -1,3 +1,16 @@
+/**
+* Based on code found at https://github.com/mafintosh/echo-servers.c (Copyright (c) 2014 Mathias Buus)
+* Copyright 2019 Nicholas Pritchard, Ryan Bunney
+**/
+
+/**
+ * @brief A simple example of a network server written in C implementing a basic echo
+ *
+ * This is a good starting point for observing C-based network code but is by no means complete.
+ * We encourage you to use this as a starting point for your project if you're not sure where to start.
+ * Food for thought:
+ *   - Can we wrap the action of sending ALL of out data and receiving ALL of the data?
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +46,87 @@ int send_message(char *msg, int client_fd, int client_id) {
 
   ERR_CHECK_WRITE;
 
-  return 0;
+  return 1;
+}
+
+/*----------------------------------------------------------------------------------------*/
+// Anti-Cheat function
+void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
+  if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
+      fprintf(stderr, "Unexpected message, terminating\n");
+      free(buf);
+      exit(EXIT_FAILURE); //Kick player instead Tier4
+  }
+
+  char s[2] = ",";
+  char *tok = strtok(buf, s);
+  int counter = 0;
+  bool isCON = false;
+  //char action[5]; // Stores the action taken by the player
+  // Scans the whole packet
+  while ( tok != NULL) {
+    switch (counter) {
+      case 0:
+        // Should be its own client id
+        if (client_id != atoi(tok)) {
+          // Kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 1:
+        // Should be MOV
+        if (strcmp("MOV",tok) != 0) {
+          // Kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 2:
+        // Should be a valid action
+        if (strcmp(tok,"EVEN")==0) {
+          sprintf(*action,"EVEN");
+        } else if (strcmp(tok,"ODD")==0) {
+          sprintf(*action,"ODD");
+        } else if (strcmp(tok,"DOUB")==0) {
+          sprintf(*action,"DOUB");
+        } else if (strcmp(tok,"CON")==0) {
+          sprintf(*action,"CON");
+          isCON = true;
+        } else {
+          // kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      case 3:
+        // Should be a 2 digit int only iff move was CON
+        if (isCON) {
+          //tok[2] = '\0';
+          *number = atoi(tok);
+          printf("Number: %d\n", *number);
+          if (*number < 2 || 12 < *number) {
+            // Player entered invalid number
+            fprintf(stderr, "Invalid number.\n");
+            free(buf);
+            exit(EXIT_FAILURE); //Kick player instead Tier4
+          }
+        } else {
+          // kick for cheating
+          printf("Kicked for cheating\n");
+        }
+        break;
+
+      default:
+        // Kick for cheating
+        printf("Kicked for cheating\n");
+        free(buf);
+        exit(EXIT_FAILURE); //Kick player instead Tier4
+
+    }
+    tok = strtok(NULL,s);
+    counter++;
+  }
 }
 
 //MAIN
@@ -50,10 +143,9 @@ int main (int argc, char *argv[]) {
     struct sockaddr_in server, client;
     char *buf;
     int pid, hid;
-    int nplayers;
-    int *nplayers_ptr;
+    int *nplayers;
     bool host = false;
-    int p[2]; //pipe
+    int p[2];
 
     //CREATE SOCKET, SET, BIND, LISTEN
     /*----------------------------------------------------------------------------------------*/
@@ -86,8 +178,9 @@ int main (int argc, char *argv[]) {
     printf("Server is listening on %d\n", port);
 
 
-    //SETUP PIPE & SHARED MEMORY FOR IPC
+    //PIPE & SHARED MEMORY
     /*----------------------------------------------------------------------------------------*/
+    // Setup Pipe for inter-process communication
     if (pipe(p) < 0) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
@@ -107,40 +200,25 @@ int main (int argc, char *argv[]) {
     int* shmem_players =  (int*) mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
     if(shmem_players == MAP_FAILED){fprintf(stderr,"Failed to create shared memory for number of players\n"); exit(EXIT_FAILURE);}
     //interpret shmem_players as an integer and make nplayer_ptr points at where this shmem points at
-    *shmem_players = 0;  nplayers_ptr = shmem_players;  nplayers = *nplayers_ptr;
-
-
-    // Create shared memory to check if host server process has been created
-    // Default value - N, no host yet
-    void* shmem_host = mmap(NULL, 4, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 0, 0);
-    if(shmem_host == MAP_FAILED){fprintf(stderr,"Failed to create shared memory for host status.\n"); exit(EXIT_FAILURE);}
-    memcpy(shmem_host, "N", 4); 
-
+    *shmem_players = 0;  nplayers = shmem_players;
+    
 
     //CREATE A HOST SERVER
     /*----------------------------------------------------------------------------------------*/
-    //Create a host server process if there is none, only do this once
-    if(strstr(shmem_host, "N")){
+    hid = fork();
 
-    	hid = fork();
-
-	    if (hid < 0) {
-	      fprintf(stderr,"Could not fork\n");
-	      exit(EXIT_FAILURE);
-	    } else if (hid == 0) {
-	      // Child process, will become host
-	      close(server_fd);
-	      close(client_fd);
-	      host = true;					//host itself knows it's a host
-	      memcpy(shmem_host, "Y", 4); 	//broadcast there'sa host already
-	      printf("Host has been created.\n");
-	    }	
+    if (hid < 0) {
+      fprintf(stderr,"Could not fork\n");
+      exit(EXIT_FAILURE);
+    } else if (hid == 0) {
+      // Child process, will become host
+      close(server_fd);
+      host = true;
     }
-    
     // Parent process will continue
 
 
-    //MAIN LOOP - NORMAL PLAYER
+    //MAIN LOOP
     /*----------------------------------------------------------------------------------------*/
     while (!host) {
         socklen_t client_len = sizeof(client);
@@ -152,21 +230,21 @@ int main (int argc, char *argv[]) {
           exit(EXIT_FAILURE);
         }
 
+
         //FORK OUT CHILD PROCESSES
         /*----------------------------------------------------------------------------------------*/
-        pid = fork();      
-
+        pid = fork();
         if (pid < 0) {
           fprintf(stderr,"Could not fork\n");
           exit(EXIT_FAILURE);
         }
 
         if (pid == 0) {
-          // Child process: client's server process
+          // Child process/Client process
           close(server_fd);
 
         } else {
-          // Parent process: will loop back to accept() and wait for another connection
+          // Parent process, will loop back to accept() and wait for another connection
           close(client_fd);
           continue;
         }
@@ -189,56 +267,54 @@ int main (int argc, char *argv[]) {
 
         //INIT & REJECT
         /*----------------------------------------------------------------------------------------*/
+        // Receives client request to enter game
         if (strstr(buf, "INIT") && strstr(shmem_start, "GNS")) {
-          int client_id = 230 + *nplayers_ptr; // client id is dependent on number of players
-          printf("INIT received, sending welcome.\n");
+            int client_id = 230 + *nplayers; // client id is dependent on number of players
+            printf("INIT received, sending welcome.\n");
 
-          memset(buf, 0, BUFFER_SIZE);
-          sprintf(buf, "WELCOME,%d",client_id); 
-          send_message(buf, client_fd, clientState.client_id); 
-          *nplayers_ptr += 1;
+            memset(buf, 0, BUFFER_SIZE);
+            sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
+            err = send(client_fd, buf, strlen(buf), 0);
+            ERR_CHECK_WRITE;
+            *nplayers += 1;
 
-          //the first player entered the lobby signal the host to start counting down
-          if(client_id == 230){
-            buf[0] = '\0';
-            sprintf(buf, "lobby open");
-            write(p[1], buf, PIPE_BUFF_SIZE);
-          }
+            //the first player entered the lobby signal the host to start counting down
+            if(client_id == 230){
+              buf[0] = '\0';
+              sprintf(buf, "first join");
+              write(p[1], buf, PIPE_BUFF_SIZE);
+            }
 
-          // Creates clientStates
-          clientState.client_id = client_id;
-          clientState.nlives = 3;
+            // Creates clientStates
+            clientState.client_id = client_id;
+            clientState.nlives = 2;
 
         } else {
-          // Rejects when game has already started
-          memset(buf, 0, BUFFER_SIZE);
-          sprintf(buf, "REJECT"); 
-          send_message(buf, client_fd, clientState.client_id); 
-
-          exit(EXIT_FAILURE);
+            // Rejects when game has already started
+            err = send(client_fd, "REJECT", 6, 0);
+            ERR_CHECK_WRITE;
+            exit(EXIT_FAILURE);
         }
-
 
         //SIGNAL START
         /*----------------------------------------------------------------------------------------*/
-        sleep(11);
+        sleep(12);
 
         if(strstr(shmem_start, "GHS")){
           memset(buf, 0, BUFFER_SIZE);
-          sprintf(buf, "START,%d,%d\n", *nplayers_ptr, clientState.nlives); 
+          sprintf(buf, "START,%d,%d\n", *nplayers, clientState.nlives); 
           send_message(buf, client_fd, clientState.client_id); 
         }
         else{
           memset(buf, 0, BUFFER_SIZE);
           sprintf(buf, "CANCEL"); 
           send_message(buf, client_fd, clientState.client_id); 
+          exit(EXIT_FAILURE);
         }
-        
 
         //LOOP EACH GAME ROUND
         /*----------------------------------------------------------------------------------------*/
         while (true) {
-
             round++;
             //CLIENT READS THE DICE FROM HOST
             /*----------------------------------------------------------------------------------------*/
@@ -262,82 +338,9 @@ int main (int argc, char *argv[]) {
 
             // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
             printf("%s\n", buf);
-            if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
-                fprintf(stderr, "Unexpected message, terminating\n");
-                free(buf);
-                exit(EXIT_FAILURE); //Kick player instead Tier4
-            }
-
-            char s[2] = ",";
-            char *tok = strtok(buf, s);
-            int counter = 0;
-            bool isCON = false;
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
-            // Scans the whole packet
-            while ( tok != NULL) {
-              switch (counter) {
-                case 0:
-                  // Should be its own client id
-                  if (clientState.client_id != atoi(tok)) {
-                    // Kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 1:
-                  // Should be MOV
-                  if (strcmp("MOV",tok) != 0) {
-                    // Kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 2:
-                  // Should be a valid action
-                  if (strcmp(tok,"EVEN")==0) {
-                    sprintf(action,"EVEN");
-                  } else if (strcmp(tok,"ODD")==0) {
-                    sprintf(action,"ODD");
-                  } else if (strcmp(tok,"DOUB")==0) {
-                    sprintf(action,"DOUB");
-                  } else if (strcmp(tok,"CON")==0) {
-                    sprintf(action,"CON");
-                    isCON = true;
-                  } else {
-                    // kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                case 3:
-                  // Should be a 2 digit int only iff move was CON
-                  if (isCON) {
-                    //tok[2] = '\0';
-                    number = atoi(tok);
-                    printf("Number: %d\n", number);
-                    if (number < 2 || 12 < number) {
-                      // Player entered invalid number
-                      fprintf(stderr, "Invalid number.\n");
-                      free(buf);
-                      exit(EXIT_FAILURE); //Kick player instead Tier4
-                    }
-                  } else {
-                    // kick for cheating
-                    printf("Kicked for cheating\n");
-                  }
-                  break;
-
-                default:
-                  // Kick for cheating
-                  printf("Kicked for cheating\n");
-                  free(buf);
-                  exit(EXIT_FAILURE); //Kick player instead Tier4
-
-              }
-              tok = strtok(NULL,s);
-              counter++;
-            }
+            watch_dog(buf, clientState.client_id, &number, &action);
 
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
@@ -374,24 +377,27 @@ int main (int argc, char *argv[]) {
             // players send the result to the host
             write(p[1], msg, PIPE_BUFF_SIZE);
 
+            //PLAYERS' UPDATE
+            /*----------------------------------------------------------------------------------------*/
+            sleep(2);
+            printf("Updating new nplayers\n");
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
-            if (nplayers == 0) {
+            if (*nplayers == 0) {
               // Everyone wins if all get eliminated
-              memset(buf, 0, BUFFER_SIZE);
               sprintf(msg, "%s", "%d,VICT");
+              //printf("msg: %s\n",msg);
               send_message(msg, client_fd, clientState.client_id);
-
               free(buf);
               exit(EXIT_SUCCESS);
 
-            } else if (nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
+            } else if (*nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
               // If one person alive then they get vict
-              memset(buf, 0, BUFFER_SIZE);
+              printf("Victory Last alive. %d\n", *nplayers);
               sprintf(msg, "%s", "%d,VICT");
+              //printf("msg: %s\n",msg);
               send_message(msg, client_fd, clientState.client_id);
-
               free(buf);
               exit(EXIT_SUCCESS);
             }
@@ -399,16 +405,14 @@ int main (int argc, char *argv[]) {
             printf("msg: %s\n",msg);
             send_message(msg, client_fd, clientState.client_id);
 
+
         }
         free(buf);
     }
-    // End of player's while Loop
-
-    
+    // End of while Loop
     // HOST CODE
     /*----------------------------------------------------------------------------------------*/
     if (host) {
-      printf("Host is setting up game.\n");
       fd_set set;
 
       struct timeval timeout;
@@ -418,6 +422,8 @@ int main (int argc, char *argv[]) {
       timeout.tv_usec = 0;
       char inbuf[13];
 
+      printf("###Host: player can join at any time...\n");
+
       // Counts number of players
       while (true) {
 
@@ -426,19 +432,19 @@ int main (int argc, char *argv[]) {
           perror("Error with select\n");
         } 
         else {
-          printf("Player Joined.\n");
           read(p[0],inbuf,PIPE_BUFF_SIZE);
 
-          if (strcmp(inbuf, "lobby open") == 0) {
-            printf("Lobby open...\n");
+          if (strcmp(inbuf, "first join") == 0) {
+            printf("###Host: lobby open, start counting down...\n");
 
             sleep(10);
 
-            if(nplayers == 1 || nplayers > MIN_PLAYERS){
+            if(*nplayers == 1 || *nplayers > MIN_PLAYERS){
               memcpy(shmem_start, "GHS", 4); 
             }
           }
         }
+      sleep(3);
 
       // Roll the dice
       /*----------------------------------------------------------------------------------------*/
@@ -451,12 +457,12 @@ int main (int argc, char *argv[]) {
         dice[0] = rand() % 6 + 1;
         dice[1] = rand() % 6 + 1;
 
-        printf("Dice one roll: %d\n",dice[0]);
-        printf("Dice two roll: %d\n",dice[1]);
+        printf("###Host: dice one roll=  %d\n",dice[0]);
+        printf("###Host: dice two roll=  %d\n",dice[1]);
 
         // Host pipes dice roll to other players
         // Each child gets the dice
-        for (int i = 0; i < nplayers; i++) {
+        for (int i = 0; i < *nplayers; i++) {
           sprintf(dice1, "%d", dice[0]);
           write(p[1],dice1,PIPE_BUFF_SIZE);
           sleep(0.1);
@@ -482,20 +488,20 @@ int main (int argc, char *argv[]) {
         timeout.tv_usec = 0;
         timeout.tv_sec = 10; // Timeout time
 
-        printf("Host: Waiting for player actions.\n");
+        printf("###Host: Waiting for player actions.\n");
         while (true) {
           int rv = select(p[0]+1, &set2, NULL, NULL, &timeout);
           if (rv == -1) {
-            perror("Host: Error with select\n");
+            perror("###Host: Error with select\n");
           } else if (rv == 0) {
-            printf("Host: Round Ended.\n");
+            printf("###Host: player result sending timeout.\n");
             break; // After timeout
 
           } else {
             memset(rmsg, 0, 8);
             rmsg[8] = '\0';
-            int a = read(p[0], rmsg, PIPE_BUFF_SIZE);
-            printf("Host Read: %s\n", rmsg);
+            read(p[0], rmsg, PIPE_BUFF_SIZE);
+            printf("###Host: result from player=  %s\n", rmsg);
 
             // Count number of outcomes
             if (strstr(rmsg, "ELIM")) {
@@ -509,32 +515,24 @@ int main (int argc, char *argv[]) {
         }
 
         // Finds new number of playersAlive
-        nplayers = elims + pass + fails;
-        playersAlive = nplayers;
-        printf("Host N: %d, %d, %d\n", elims, pass, fails);
+        *nplayers = elims + pass + fails;
+        playersAlive = *nplayers;
+        printf("###Host: elim=%d, pass=%d, fails=%d\n", elims, pass, fails);
 
         // If everyone is elim, then everyone gets vict
-        if (elims == nplayers) {
-          nplayers = 0; // 0 when all players die, so everyone wins
+        if (elims == *nplayers) {
+          *nplayers = 0; // 0 when all players die, so everyone wins
 
         } else {
-          nplayers -= elims;
+          *nplayers -= elims;
         }
 
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
-        // Send new player count to each process
-        //memcpy(players, &nplayers, sizeof(int)); // Updates the player count
-        char np[8]; // Number of players in string, increase size of scaling
-        sprintf(np, "%d", nplayers);
-        for (int i = 0; i < playersAlive; i++) {
-          write(p[1], np, PIPE_BUFF_SIZE);
-        }
-
-        printf("Sent new player count, %d\n", nplayers);
-        if (nplayers <= 1) {
+        if (*nplayers <= 1) {
           // End game
           // Kill the parent?
+          printf("###Host: game over.");
           free(buf);
           exit(EXIT_SUCCESS);
         }
@@ -543,4 +541,3 @@ int main (int argc, char *argv[]) {
     }
 }
 }
-
