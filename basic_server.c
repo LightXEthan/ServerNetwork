@@ -278,7 +278,7 @@ int main (int argc, char *argv[]) {
         //COUNTING PLAYERS & TIMEOUT & DECIDE START OR CANCEL
         /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
-        char inbuf[13];
+        char inbuf[PIPE_BUFF_SIZE];
 
         // Everyone send how many players they know to the pipe
         buf[0] = '\0';
@@ -306,8 +306,8 @@ int main (int argc, char *argv[]) {
             //CLIENT READS THE DICE FROM HOST
             /*----------------------------------------------------------------------------------------*/
             int dice[2];
-            char dice1[3];
-            char dice2[3];
+            char dice1[PIPE_BUFF_SIZE];
+            char dice2[PIPE_BUFF_SIZE];
 
             read(p1[0],dice1,PIPE_BUFF_SIZE);
             dice[0] = atoi(dice1);
@@ -368,7 +368,7 @@ int main (int argc, char *argv[]) {
             /*----------------------------------------------------------------------------------------*/
             sleep(2);
             printf("Reading\n");
-            char np[8];
+            char np[PIPE_BUFF_SIZE];
             read(p1[0], np, PIPE_BUFF_SIZE);
             nplayers = atoi(np);
             printf("Client nplayers Read: %d\n", nplayers);
@@ -412,7 +412,7 @@ int main (int argc, char *argv[]) {
       FD_SET(p1[0],&set);
       timeout.tv_sec = 10; // Timeout time
       timeout.tv_usec = 0;
-      char inbuf[13];
+      char inbuf[PIPE_BUFF_SIZE];
 
       // Get number of players
       int max = 0;
@@ -443,13 +443,12 @@ int main (int argc, char *argv[]) {
       //printf("Game start!\n");
 
       // Start the game, host sends number of players to players
-      buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
-      buf[0] = '\0';
-      sprintf(buf, "%d",nplayers);
+      char buff[PIPE_BUFF_SIZE];
+      sprintf(buff, "%d",nplayers);
 
       for (int i = 0; i < nplayers; i++) {
         printf("Host sent players: %d\n", nplayers);
-        write(p1[1], buf, PIPE_BUFF_SIZE);
+        write(p1[1], buff, PIPE_BUFF_SIZE);
       }
       sleep(3);
 
@@ -486,7 +485,7 @@ int main (int argc, char *argv[]) {
         int fails = 0;
         int pass = 0;
         int playersAlive = 0;
-        char rmsg[8];
+        char rmsg[PIPE_BUFF_SIZE];
         fd_set set2;
         FD_ZERO(&set2);
         FD_SET(p1[0],&set2);
@@ -537,7 +536,7 @@ int main (int argc, char *argv[]) {
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
         // Send new player count to each process
-        char np[8]; // Number of players in string, increase size of scaling
+        char np[PIPE_BUFF_SIZE]; // Number of players in string, increase size of scaling
         sprintf(np, "%d", nplayers);
         for (int i = 0; i < playersAlive; i++) {
           write(p1[1], np, PIPE_BUFF_SIZE);
@@ -547,7 +546,6 @@ int main (int argc, char *argv[]) {
         if (nplayers <= 1) {
           // End game
           // Kill the parent?
-          free(buf);
           exit(EXIT_SUCCESS);
         }
 
