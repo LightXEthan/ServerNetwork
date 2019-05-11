@@ -279,6 +279,7 @@ int main (int argc, char *argv[]) {
         /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
         char inbuf[PIPE_BUFF_SIZE];
+        bool singlemode = false;
 
         // Everyone send how many players they know to the pipe
         buf[0] = '\0';
@@ -289,6 +290,12 @@ int main (int argc, char *argv[]) {
         read(p1[0],inbuf, PIPE_BUFF_SIZE);
         nplayers = atoi(inbuf);
         printf("Read from host: %d\n", nplayers);
+
+        //single player mode: given 3 lives, win if survive 5 rounds
+        if(nplayers == 1){
+          singlemode = true;
+          clientState.nlives = 3;
+        }
 
         //SIGNAL START
         /*----------------------------------------------------------------------------------------*/
@@ -375,7 +382,7 @@ int main (int argc, char *argv[]) {
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
-            if (nplayers == 0) {
+            if (!singlemode && nplayers == 0) {
               // Everyone wins if all get eliminated
               sprintf(msg, "%s", "%d,VICT");
               //printf("msg: %s\n",msg);
@@ -383,11 +390,25 @@ int main (int argc, char *argv[]) {
               free(buf);
               exit(EXIT_SUCCESS);
 
-            } else if (nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
+            } else if (singlemode && nplayers == 0){
+              sprintf(msg, "%s", "%d,ELIM");
+              send_message(msg, client_fd, clientState.client_id);
+              free(buf);
+              exit(EXIT_SUCCESS);
+
+            } else if (!singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
               // If one person alive then they get vict
               printf("Victory Last alive. %d\n", nplayers);
               sprintf(msg, "%s", "%d,VICT");
               //printf("msg: %s\n",msg);
+              send_message(msg, client_fd, clientState.client_id);
+              free(buf);
+              exit(EXIT_SUCCESS);
+
+            } else if (singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL")) && round == 5) {
+              // single player mode: if in round 5 after action the player's life still >= 0, the player win
+              printf("Champion! Survive 5 rounds!");
+              sprintf(msg, "%s", "%d,VICT");
               send_message(msg, client_fd, clientState.client_id);
               free(buf);
               exit(EXIT_SUCCESS);
@@ -413,6 +434,7 @@ int main (int argc, char *argv[]) {
       timeout.tv_sec = 10; // Timeout time
       timeout.tv_usec = 0;
       char inbuf[PIPE_BUFF_SIZE];
+      bool singlemode = false;
 
       // Get number of players
       int max = 0;
@@ -439,6 +461,10 @@ int main (int argc, char *argv[]) {
       }
 
       nplayers = max;
+      if (nplayers == 1){
+        singlemode = true;
+      }
+
       // Check min number of players
       //printf("Game start!\n");
 
@@ -543,7 +569,7 @@ int main (int argc, char *argv[]) {
         }
 
         printf("Sent new player count, %d\n", nplayers);
-        if (nplayers <= 1) {
+        if (nplayers <= 1 && !singlemode) {
           // End game
           // Kill the parent?
           exit(EXIT_SUCCESS);
