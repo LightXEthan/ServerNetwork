@@ -69,6 +69,7 @@ try:
         # Look for the response
         amount_received = 0
         amount_expected = len(message)
+        gameInfo = ["",""]
 
         while amount_received < amount_expected:
             # if recv() return 0 bytes -> server close connection -> no more receive
