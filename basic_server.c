@@ -512,9 +512,8 @@ int main (int argc, char *argv[]) {
         int pass = 0;
         int playersAlive = 0;
         char rmsg[PIPE_BUFF_SIZE];
-        fd_set set2;
-        FD_ZERO(&set2);
-        FD_SET(p1[0],&set2);
+        FD_ZERO(&set);
+        FD_SET(p1[0],&set);
 
         // Count number of each result
         timeout.tv_usec = 0;
@@ -522,7 +521,7 @@ int main (int argc, char *argv[]) {
 
         printf("Host: Waiting for player actions.\n");
         while (true) {
-          int rv = select(p1[0]+1, &set2, NULL, NULL, &timeout);
+          int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
           if (rv == -1) {
             perror("Host: Error with select\n");
           } else if (rv == 0) {
@@ -572,6 +571,9 @@ int main (int argc, char *argv[]) {
         if (nplayers <= 1 && !singlemode) {
           // End game
           // Kill the parent?
+          exit(EXIT_SUCCESS);
+        } else if (singlemode && nplayers == 0) {
+          // End game
           exit(EXIT_SUCCESS);
         }
 
