@@ -127,6 +127,9 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
     tok = strtok(NULL,s);
     counter++;
   }
+  if (counter == 2) {
+    printf("Kicked for cheating\n");
+  }
 }
 
 //MAIN
@@ -278,7 +281,7 @@ int main (int argc, char *argv[]) {
         //COUNTING PLAYERS & TIMEOUT & DECIDE START OR CANCEL
         /*----------------------------------------------------------------------------------------*/
         // Pipe to all processes that the game as started
-        char inbuf[PIPE_BUFF_SIZE];
+
         bool singlemode = false;
 
         // Everyone send how many players they know to the pipe
@@ -286,7 +289,9 @@ int main (int argc, char *argv[]) {
         sprintf(buf, "%d",nplayers);
         write(p1[1], buf, PIPE_BUFF_SIZE);
         printf("Client Wrote\n");
-        sleep(1);
+
+        sleep(5);
+        char inbuf[PIPE_BUFF_SIZE];
         read(p1[0],inbuf, PIPE_BUFF_SIZE);
         nplayers = atoi(inbuf);
         printf("Read from host: %d\n", nplayers);
@@ -312,7 +317,14 @@ int main (int argc, char *argv[]) {
             round++;
             //CLIENT READS THE DICE FROM HOST
             /*----------------------------------------------------------------------------------------*/
+            //TEST
             int dice[2];
+            srand(time(0));
+            dice[0] = rand() % 6 + 1;
+            dice[1] = rand() % 6 + 1;
+            printf("Dice: %d, %d\n", dice[0], dice[1]);
+            int diceSum = dice[0] + dice[1];
+            /*
             char dice1[PIPE_BUFF_SIZE];
             char dice2[PIPE_BUFF_SIZE];
 
@@ -324,6 +336,7 @@ int main (int argc, char *argv[]) {
             printf("Client Dice read\n");
 
             int diceSum = dice[0] + dice[1];
+            */
             sleep(1);
             // Waits for move from player
             memset(buf, 0, BUFFER_SIZE);
@@ -390,7 +403,7 @@ int main (int argc, char *argv[]) {
               free(buf);
               exit(EXIT_SUCCESS);
 
-            } else if (singlemode && nplayers == 0){
+            } else if (nplayers == 0){
               sprintf(msg, "%s", "%d,ELIM");
               send_message(msg, client_fd, clientState.client_id);
               free(buf);
@@ -407,8 +420,13 @@ int main (int argc, char *argv[]) {
 
             } else if (singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL")) && round == 5) {
               // single player mode: if in round 5 after action the player's life still >= 0, the player win
-              printf("Champion! Survive 5 rounds!");
+              printf("Champion! Survived 5 rounds!");
               sprintf(msg, "%s", "%d,VICT");
+              send_message(msg, client_fd, clientState.client_id);
+              free(buf);
+              exit(EXIT_SUCCESS);
+            } else if (strstr(msg, "ELIM")) {
+              sprintf(msg, "%s", "%d,ELIM");
               send_message(msg, client_fd, clientState.client_id);
               free(buf);
               exit(EXIT_SUCCESS);
@@ -424,7 +442,7 @@ int main (int argc, char *argv[]) {
     // End of while Loop
     // HOST CODE
     /*----------------------------------------------------------------------------------------*/
-    if (host) {
+    while (host) {
       printf("Host is setting up game.\n");
       fd_set set;
 
@@ -436,37 +454,35 @@ int main (int argc, char *argv[]) {
       char inbuf[PIPE_BUFF_SIZE];
       bool singlemode = false;
 
-      // Get number of players
-      int max = 0;
-
+      memcpy(shmem, "GNS", 4);
       printf("Lobby open...\n");
 
       // Counts number of players
+      nplayers = 0;
       while (true) {
         int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
         if (rv == -1) {
           perror("Error with select\n");
         } else if (rv == 0) {//when timeout
           memcpy(shmem, "GHS", 4); // Puts into shared memory that game has started
-          printf("Players can no longer join.\nNumber of players: %d\n", max);
+          printf("Players can no longer join.\nNumber of players: %d\n", nplayers);
           break;
+
         } else {
-          printf("Player Joined.\n");
           read(p1[0],inbuf,PIPE_BUFF_SIZE);
+          printf("Player Joined.\n");
           // Gets the highest number which is the player count
-          if (atoi(inbuf) > max) {
-            max = atoi(inbuf);
-          }
+          nplayers++;
         }
       }
 
-      nplayers = max;
       if (nplayers == 1){
         singlemode = true;
       }
 
       // Check min number of players
       //printf("Game start!\n");
+      sleep(5);
 
       // Start the game, host sends number of players to players
       char buff[PIPE_BUFF_SIZE];
@@ -476,11 +492,12 @@ int main (int argc, char *argv[]) {
         printf("Host sent players: %d\n", nplayers);
         write(p1[1], buff, PIPE_BUFF_SIZE);
       }
-      sleep(3);
+      sleep(1);
 
       // Roll the dice
       /*----------------------------------------------------------------------------------------*/
       while (true) {
+        /*
         int dice[2];
         char dice1[3];
         char dice2[3];
@@ -502,6 +519,7 @@ int main (int argc, char *argv[]) {
           write(p1[1],dice2,PIPE_BUFF_SIZE);
         }
         sleep(1);
+        */
 
         //HOST MANAGE GAME RESULT
         /*----------------------------------------------------------------------------------------*/
@@ -529,8 +547,6 @@ int main (int argc, char *argv[]) {
             break; // After timeout
 
           } else {
-            memset(rmsg, 0, 8);
-            rmsg[8] = '\0';
             read(p1[0], rmsg, PIPE_BUFF_SIZE);
             printf("Host Read: %s\n", rmsg);
 
@@ -568,13 +584,20 @@ int main (int argc, char *argv[]) {
         }
 
         printf("Sent new player count, %d\n", nplayers);
+        sleep(2);
         if (nplayers <= 1 && !singlemode) {
           // End game
           // Kill the parent?
-          exit(EXIT_SUCCESS);
+          //exit(EXIT_SUCCESS);
+          printf("Game ended\n");
+          sleep(10);
+          break;
         } else if (singlemode && nplayers == 0) {
           // End game
-          exit(EXIT_SUCCESS);
+          printf("Game ended\n");
+          sleep(10);
+          break;
+          //exit(EXIT_SUCCESS);
         }
 
       }
