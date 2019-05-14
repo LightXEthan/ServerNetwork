@@ -158,7 +158,7 @@ int main (int argc, char *argv[]) {
     int pid, hid;
     int nplayers = 0;
     bool host = false;
-    int p1[2];
+    int p1[2], p2[2];
 
     //CREATE SOCKET, SET, BIND, LISTEN
     /*----------------------------------------------------------------------------------------*/
@@ -194,7 +194,14 @@ int main (int argc, char *argv[]) {
     //PIPE & SHARED MEMORY
     /*----------------------------------------------------------------------------------------*/
     // Setup Pipe for inter-process communication
+    // Pipe child to host
     if (pipe(p1) < 0) {
+      fprintf(stderr,"Could not pipe\n");
+      exit(EXIT_FAILURE);
+    }
+
+    // Pipe host to child
+    if (pipe(p2) < 0) {
       fprintf(stderr,"Could not pipe\n");
       exit(EXIT_FAILURE);
     }
@@ -293,6 +300,8 @@ int main (int argc, char *argv[]) {
         // Pipe to all processes that the game as started
 
         bool singlemode = false;
+        close(p1[0]);
+        close(p2[1]);
 
         // Everyone send how many players they know to the pipe
         char players[PIPE_BUFF_SIZE];
@@ -300,9 +309,8 @@ int main (int argc, char *argv[]) {
         write(p1[1], players, PIPE_BUFF_SIZE);
         printf("Client Wrote\n");
 
-        sleep(5);
         char inbuf[PIPE_BUFF_SIZE];
-        read(p1[0],inbuf, PIPE_BUFF_SIZE);
+        read(p2[0],inbuf, PIPE_BUFF_SIZE);
         nplayers = atoi(inbuf);
         printf("Read from host: %d\n", nplayers);
 
@@ -348,14 +356,12 @@ int main (int argc, char *argv[]) {
             int diceSum = dice[0] + dice[1];
             */
 
-            sleep(1);
             // Waits for move from player
-
 
             struct timeval mvtout;
             mvtout.tv_sec = 10; //wait move response for 10 sec
             mvtout.tv_usec = 0;
-
+            bool moved = true;
 
             setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));
             memset(buf, 0, BUFFER_SIZE);
@@ -363,16 +369,17 @@ int main (int argc, char *argv[]) {
 
             if( rec < 0){
               fprintf(stderr,"No move response from the client. LIVE - 1\n");
-              clientState.nlives--;
-              exit(EXIT_FAILURE);
+              moved = false;
             }
 
-            // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
-            printf("%s\n", buf);
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
-            watch_dog(buf, clientState.client_id, &number, &action);
 
+            if (moved) {
+              // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
+              printf("%s\n", buf);
+              watch_dog(buf, clientState.client_id, &number, &action);
+            }
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
@@ -410,10 +417,9 @@ int main (int argc, char *argv[]) {
 
             //PLAYERS' UPDATE
             /*----------------------------------------------------------------------------------------*/
-            sleep(2);
             printf("Reading\n");
             char np[PIPE_BUFF_SIZE];
-            read(p1[0], np, PIPE_BUFF_SIZE);
+            read(p2[0], np, PIPE_BUFF_SIZE);
             nplayers = atoi(np);
             printf("Client nplayers Read: %d\n", nplayers);
 
@@ -477,6 +483,8 @@ int main (int argc, char *argv[]) {
       timeout.tv_usec = 0;
       char inbuf[PIPE_BUFF_SIZE];
       bool singlemode = false;
+      close(p1[1]);
+      close(p2[0]);
 
       memcpy(shmem, "GNS", 4);
       printf("Lobby open...\n");
@@ -505,8 +513,6 @@ int main (int argc, char *argv[]) {
       }
 
       // Check min number of players
-      //printf("Game start!\n");
-      sleep(5);
 
       // Start the game, host sends number of players to players
       char buff[PIPE_BUFF_SIZE];
@@ -514,7 +520,7 @@ int main (int argc, char *argv[]) {
 
       for (int i = 0; i < nplayers; i++) {
         printf("Host sent players: %d\n", nplayers);
-        write(p1[1], buff, PIPE_BUFF_SIZE);
+        write(p2[1], buff, PIPE_BUFF_SIZE);
       }
       sleep(1);
 
@@ -559,7 +565,7 @@ int main (int argc, char *argv[]) {
 
         // Count number of each result
         timeout.tv_usec = 0;
-        timeout.tv_sec = 10; // Timeout time
+        timeout.tv_sec = 12; // Timeout time
 
         printf("Host: Waiting for player actions.\n");
         while (true) {
@@ -597,7 +603,6 @@ int main (int argc, char *argv[]) {
         } else {
           nplayers -= elims;
         }
-        sleep(2);
 
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
@@ -605,15 +610,13 @@ int main (int argc, char *argv[]) {
         char np[PIPE_BUFF_SIZE]; // Number of players in string, increase size of scaling
         sprintf(np, "%d", nplayers);
         for (int i = 0; i < playersAlive; i++) {
-          write(p1[1], np, PIPE_BUFF_SIZE);
+          write(p2[1], np, PIPE_BUFF_SIZE);
         }
 
         printf("Sent new player count, %d\n", nplayers);
-        sleep(2);
+
         if (nplayers <= 1 && !singlemode) {
           // End game
-          // Kill the parent?
-          //exit(EXIT_SUCCESS);
           printf("Game ended\n");
           sleep(10);
           break;
@@ -622,7 +625,6 @@ int main (int argc, char *argv[]) {
           printf("Game ended\n");
           sleep(10);
           break;
-          //exit(EXIT_SUCCESS);
         }
 
       }
