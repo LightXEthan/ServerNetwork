@@ -71,6 +71,8 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         if (client_id != atoi(tok)) {
           // Kick for cheating
           printf("Kicked for cheating\n");
+          free(buf);
+          exit(EXIT_SUCCESS);
         }
         break;
 
@@ -79,6 +81,8 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         if (strcmp("MOV",tok) != 0) {
           // Kick for cheating
           printf("Kicked for cheating\n");
+          free(buf);
+          exit(EXIT_SUCCESS);
         }
         break;
 
@@ -96,6 +100,8 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         } else {
           // kick for cheating
           printf("Kicked for cheating\n");
+          free(buf);
+          exit(EXIT_SUCCESS);
         }
         break;
 
@@ -109,11 +115,13 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
             // Player entered invalid number
             fprintf(stderr, "Invalid number.\n");
             free(buf);
-            exit(EXIT_FAILURE); //Kick player instead Tier4
+            exit(EXIT_FAILURE);
           }
         } else {
           // kick for cheating
           printf("Kicked for cheating\n");
+          free(buf);
+          exit(EXIT_FAILURE);
         }
         break;
 
@@ -121,7 +129,7 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         // Kick for cheating
         printf("Kicked for cheating\n");
         free(buf);
-        exit(EXIT_FAILURE); //Kick player instead Tier4
+        exit(EXIT_FAILURE);
 
     }
     tok = strtok(NULL,s);
@@ -129,6 +137,8 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
   }
   if (counter == 2) {
     printf("Kicked for cheating\n");
+    free(buf);
+    exit(EXIT_SUCCESS);
   }
 }
 
