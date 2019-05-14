@@ -295,9 +295,9 @@ int main (int argc, char *argv[]) {
         bool singlemode = false;
 
         // Everyone send how many players they know to the pipe
-        buf[0] = '\0';
-        sprintf(buf, "%d",nplayers);
-        write(p1[1], buf, PIPE_BUFF_SIZE);
+        char players[PIPE_BUFF_SIZE];
+        sprintf(players, "%d",nplayers);
+        write(p1[1], players, PIPE_BUFF_SIZE);
         printf("Client Wrote\n");
 
         sleep(5);
