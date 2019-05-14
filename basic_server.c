@@ -573,6 +573,7 @@ int main (int argc, char *argv[]) {
         } else {
           nplayers -= elims;
         }
+        sleep(2);
 
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
