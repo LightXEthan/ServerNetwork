@@ -105,7 +105,7 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
           //tok[2] = '\0';
           *number = atoi(tok);
           printf("Number: %d\n", *number);
-          if (*number < 2 || 12 < *number) {
+          if (*number < 1 || 6 < *number) {
             // Player entered invalid number
             fprintf(stderr, "Invalid number.\n");
             free(buf);
@@ -353,7 +353,7 @@ int main (int argc, char *argv[]) {
               // Odd rolled above 5 and pass is sent
               sprintf(msg, "%s", "%d,PASS");
 
-            } else if (strcmp(action,"CON")==0 && diceSum == number) {
+            } else if (strcmp(action,"CON")==0 && (dice[0] == number || dice[1] == number)) {
               // Choice from the player, below gets the number
               sprintf(msg, "%s", "%d,PASS");
 
