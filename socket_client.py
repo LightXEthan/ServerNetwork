@@ -15,15 +15,6 @@ From this, you should be able to bootstrap message-parsing to and from the serve
 Then, start to add functions in the server code that actually 'run' the game in the background.
 """
 
-'''
-THINGS TO DO:
-@ adding timeout, deal with unexpected message sent by server
-@ think of how can the client cheat on server
-@ reconnect after some time period when the request has been cancelled?
-@ terminate when server shut down/reset e.g. keyboard interrupt
-@ things to do when the waiting after move getting too long
-
-'''
 
 import socket,sched,time
 from time import sleep
@@ -44,22 +35,6 @@ nlives = -1
 message = 'INIT'.encode()
 sock.sendall(message)
 
-
-# try to schedule an event which check connection with server periodically
-# got this error message -> TypeError: 'NoneType' object is not callable
-
-'''
-def check_connection():
-  # cannot either perform send or receive -> lost connection
-  if sock.sendall(b" ") is not None and sock.recv(1024) == 0:
-    print("Lost connection with server")
-    print ('closing socket')
-    sock.close()
-
-scheduler = sched.scheduler(time.time, time.sleep)
-scheduler.enter(5, 1, check_connection())
-scheduler.run()
-'''
 
 try:
     while True:
@@ -99,12 +74,7 @@ try:
 
                 # first move
                 move = str(input("Your move: "))
-                ''' sendall():continues to send data until either all data has been sent or an error occurs.
-                None is returned on success.
-                TODO: check exception??
-                send and recv: return when the associated network buffers have been filled (send) or emptied (recv).
-                They then tell you how many bytes they handled.
-                '''
+
                 sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) # Client has ID 231
 
             elif "PASS" in server_msg:
@@ -135,22 +105,22 @@ try:
                 print("You lost, good game.")
                 # ascii art credit: http://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
                 print('''
-            ______      _____ _
-           |  ____/\   |_   _| |
-           | |__ /  \    | | | |
-           |  __/ /\ \   | | | |
-           | | / ____ \ _| |_| |____
-           |_|/_/ ___\_\_____|______|
-           \ \   / / __ \| |  | |
-            \ \_/ / |  | | |  | |
-             \   /| |  | | |  | |
-              | | | |__| | |__| |
-             _|_|_ \____/ \____/ _  __
-            / ____| |  | |/ ____| |/ /
-           | (___ | |  | | |    | ' /
-            \___ \| |  | | |    |  <
-            ____) | |__| | |____| . \\
-           |_____/ \____/ \_____|_|\_\\
+          ______      _____ _
+         |  ____/\   |_   _| |
+         | |__ /  \    | | | |
+         |  __/ /\ \   | | | |
+         | | / ____ \ _| |_| |____
+         |_|/_/ ___\_\_____|______|
+         \ \   / / __ \| |  | |
+          \ \_/ / |  | | |  | |
+           \   /| |  | | |  | |
+            | | | |__| | |__| |
+           _|_|_ \____/ \____/ _  __
+          / ____| |  | |/ ____| |/ /
+         | (___ | |  | | |    | ' /
+          \___ \| |  | | |    |  <
+          ____) | |__| | |____| . \\
+         |_____/ \____/ \_____|_|\_\\
 
                                ''')
                 exit = True
@@ -159,25 +129,27 @@ try:
             elif "VICT" in server_msg or gameInfo[1] == 1:
                 # ascii art credit: https://www.asciiart.eu/computers/smileys
                 print('''
-                         __          __  _____   _   _        _____
-                         \ \        / / |_   _| | \ | |     .'     '.
-                          \ \  /\  / /    | |   |  \| |    /  o   o  \\
-                           \ \/  \/ /     | |   | . ` |   |           |
-                            \  /\  /     _| |_  | |\  |   |  \     /  |
-                             \/  \/     |_____| |_| \_|    \  '---'  /
-                                                            '._____.'
+   __          __  _____   _   _        _____
+   \ \        / / |_   _| | \ | |     .'     '.
+    \ \  /\  / /    | |   |  \| |    /  o   o  \\
+     \ \/  \/ /     | |   | . ` |   |           |
+      \  /\  /     _| |_  | |\  |   |  \     /  |
+       \/  \/     |_____| |_| \_|    \  '---'  /
+                                      '._____.'
                                     ''')
 
                 exit = True
                 break
 
             elif "REJECT" in server_msg:
-                print("Request was rejected due to delayed connection")
+                print("Request was rejected due to delayed connection.")
                 exit = True
                 break
 
             elif "CANCEL" in server_msg:
-                print("Not enough player, game cannot start")
+                print("Not enough player, game cannot start.")
+                exit = True
+                break
                 # attempt to connect again??
 
             else:
@@ -187,5 +159,5 @@ try:
         if exit:
             break
 finally:
-    print ('closing socket')
+    print ('closing socket.')
     sock.close()

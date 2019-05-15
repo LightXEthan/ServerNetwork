@@ -29,10 +29,11 @@
 
 #define BUFFER_SIZE 1024
 #define PIPE_BUFF_SIZE 14
+#define MIN_PLAYERS 4
 
 #define ERR_CHECK_WRITE if (err < 0){fprintf(stderr,"Client write failed\n");exit(EXIT_FAILURE);}
 #define ERR_CHECK_READ if (rec < 0){fprintf(stderr,"Client read failed\n");exit(EXIT_FAILURE);}
-#define MIN_PLAYERS 2
+
 
 //FUNCTIONS
 /*----------------------------------------------------------------------------------------*/
@@ -319,14 +320,22 @@ int main (int argc, char *argv[]) {
           singlemode = true;
           clientState.nlives = 3;
         }
-
-        //SIGNAL START
-        /*----------------------------------------------------------------------------------------*/
-        buf[0] = '\0';
-        sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
-
-        err = send(client_fd, buf, strlen(buf), 0); // Send another thing
-        ERR_CHECK_WRITE;
+        else if(nplayers < MIN_PLAYERS){
+          err = send(client_fd, "CANCEL", 6, 0);
+          ERR_CHECK_WRITE; 
+          printf("Gameover,cleaning memory......\n");
+          free(buf);
+          if (close(client_fd) != 0){
+            fprintf(stderr,"Socket close unsuccessfully.\n");
+          }
+          exit(EXIT_SUCCESS);
+        }
+        else{
+          buf[0] = '\0';
+          sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
+          err = send(client_fd, buf, strlen(buf), 0); // Send another thing
+          ERR_CHECK_WRITE;
+        }
 
 
         //LOOP EACH GAME ROUND
@@ -423,53 +432,69 @@ int main (int argc, char *argv[]) {
             nplayers = atoi(np);
             printf("Client nplayers Read: %d\n", nplayers);
 
+            bool gameover = false;
+
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
             if (!singlemode && nplayers == 0) {
               // Everyone wins if all get eliminated
               sprintf(msg, "%s", "%d,VICT");
               //printf("msg: %s\n",msg);
-              send_message(msg, client_fd, clientState.client_id);
-              free(buf);
-              exit(EXIT_SUCCESS);
+              //send_message(msg, client_fd, clientState.client_id);
+              gameover = true;
+              //free(buf);
+              //exit(EXIT_SUCCESS);
 
             } else if (nplayers == 0){
               sprintf(msg, "%s", "%d,ELIM");
-              send_message(msg, client_fd, clientState.client_id);
-              free(buf);
-              exit(EXIT_SUCCESS);
+              //send_message(msg, client_fd, clientState.client_id);
+              gameover = true;
+              //free(buf);
+              //exit(EXIT_SUCCESS);
 
             } else if (!singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
               // If one person alive then they get vict
               printf("Victory Last alive. %d\n", nplayers);
               sprintf(msg, "%s", "%d,VICT");
               //printf("msg: %s\n",msg);
-              send_message(msg, client_fd, clientState.client_id);
-              free(buf);
-              exit(EXIT_SUCCESS);
+              //send_message(msg, client_fd, clientState.client_id);
+              gameover = true;
+              //free(buf);
+              //exit(EXIT_SUCCESS);
 
             } else if (singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL")) && round == 5) {
               // single player mode: if in round 5 after action the player's life still >= 0, the player win
               printf("Champion! Survived 5 rounds!");
               sprintf(msg, "%s", "%d,VICT");
-              send_message(msg, client_fd, clientState.client_id);
-              free(buf);
-              exit(EXIT_SUCCESS);
+              //send_message(msg, client_fd, clientState.client_id);
+              gameover = true;
+              //free(buf);
+              //exit(EXIT_SUCCESS);
             } else if (strstr(msg, "ELIM")) {
               sprintf(msg, "%s", "%d,ELIM");
-              send_message(msg, client_fd, clientState.client_id);
-              free(buf);
-              exit(EXIT_SUCCESS);
+              //send_message(msg, client_fd, clientState.client_id);
+              gameover = true;
+              //free(buf);
+              //exit(EXIT_SUCCESS);
             }
 
             printf("msg: %s\n",msg);
             send_message(msg, client_fd, clientState.client_id);
 
+            if(gameover)break;
 
-        }
+        }//end of game handling while
+
+        printf("Gameover,cleaning memory......\n");
         free(buf);
+        if (close(client_fd) != 0){
+            fprintf(stderr,"Socket close unsuccessfully.\n");
+        }
+        exit(EXIT_SUCCESS);
     }
     // End of while Loop
+
+
     // HOST CODE
     /*----------------------------------------------------------------------------------------*/
     while (host) {
@@ -506,11 +531,7 @@ int main (int argc, char *argv[]) {
           // Gets the highest number which is the player count
           nplayers++;
         }
-      }
-
-      if (nplayers == 1){
-        singlemode = true;
-      }
+      }     
 
       // Check min number of players
 
@@ -522,6 +543,16 @@ int main (int argc, char *argv[]) {
         printf("Host sent players: %d\n", nplayers);
         write(p2[1], buff, PIPE_BUFF_SIZE);
       }
+
+      if (nplayers == 1){
+        singlemode = true;
+      }
+      else if(nplayers < MIN_PLAYERS){
+        printf("Host:game has been cencelled. New game start in 10 seconds.\n");
+        sleep(10);
+        continue;
+      }
+
       sleep(1);
 
       // Roll the dice
@@ -627,6 +658,6 @@ int main (int argc, char *argv[]) {
           break;
         }
 
-      }
-    }
+      }//end of game playing while
+    }//end of host while
 }
