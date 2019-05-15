@@ -436,52 +436,47 @@ int main (int argc, char *argv[]) {
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
+            char winner[BUFFER_SIZE];
+
             if (!singlemode && nplayers == 0) {
               // Everyone wins if all get eliminated
               sprintf(msg, "%s", "%d,VICT");
-              //printf("msg: %s\n",msg);
-              //send_message(msg, client_fd, clientState.client_id);
+
+              sprintf(winner, "%d", clientState.client_id);
+              write(p1[1], winner, PIPE_BUFF_SIZE);
+
               gameover = true;
-              //free(buf);
-              //exit(EXIT_SUCCESS);
 
             } else if (nplayers == 0){
               sprintf(msg, "%s", "%d,ELIM");
-              //send_message(msg, client_fd, clientState.client_id);
               gameover = true;
-              //free(buf);
-              //exit(EXIT_SUCCESS);
 
             } else if (!singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL"))) {
               // If one person alive then they get vict
               printf("Victory Last alive. %d\n", nplayers);
               sprintf(msg, "%s", "%d,VICT");
-              //printf("msg: %s\n",msg);
-              //send_message(msg, client_fd, clientState.client_id);
+
+              sprintf(winner, "%d", clientState.client_id);
+              write(p1[1], winner, PIPE_BUFF_SIZE);
+
               gameover = true;
-              //free(buf);
-              //exit(EXIT_SUCCESS);
 
             } else if (singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL")) && round == 5) {
               // single player mode: if in round 5 after action the player's life still >= 0, the player win
               printf("Champion! Survived 5 rounds!");
               sprintf(msg, "%s", "%d,VICT");
-              //send_message(msg, client_fd, clientState.client_id);
               gameover = true;
-              //free(buf);
-              //exit(EXIT_SUCCESS);
+
             } else if (strstr(msg, "ELIM")) {
               sprintf(msg, "%s", "%d,ELIM");
-              //send_message(msg, client_fd, clientState.client_id);
               gameover = true;
-              //free(buf);
-              //exit(EXIT_SUCCESS);
             }
 
             printf("msg: %s\n",msg);
             send_message(msg, client_fd, clientState.client_id);
 
-            if(gameover)break;
+            if(gameover) break;//if game over, go to clean memory part
+            
 
         }//end of game handling while
 
@@ -555,9 +550,11 @@ int main (int argc, char *argv[]) {
 
       sleep(1);
 
+      int round = 0;
       // Roll the dice
       /*----------------------------------------------------------------------------------------*/
       while (true) {
+        round++;
         /*
         int dice[2];
         char dice1[3];
@@ -627,8 +624,10 @@ int main (int argc, char *argv[]) {
         playersAlive = nplayers;
         printf("Host N: %d, %d, %d\n", elims, pass, fails);
 
+        bool edge = false;
         // If everyone is elim, then everyone gets vict
         if (elims == nplayers) {
+          edge = true;
           nplayers = 0; // 0 when all players die, so everyone wins
 
         } else {
@@ -646,14 +645,32 @@ int main (int argc, char *argv[]) {
 
         printf("Sent new player count, %d\n", nplayers);
 
+        sleep(2);
+
         if (nplayers <= 1 && !singlemode) {
           // End game
-          printf("Game ended\n");
+
+          //read the final game result from the pipe p1
+          printf("########## Game ended after %d rounds ##########\n", round);
+          round = 0;
+          if(edge){//when more than one player died at the same time
+            for (int i = 0; i < elims; i++){
+              read(p1[0], rmsg, PIPE_BUFF_SIZE);
+              printf("%s wins!\n", rmsg);
+            }
+          }
+          else{//one player survive at the end
+              read(p1[0], rmsg, PIPE_BUFF_SIZE);
+              printf("%s wins!\n", rmsg);
+          }
+
+          printf("########## Next game starts in 10 seconds ##########\n");
           sleep(10);
           break;
         } else if (singlemode && nplayers == 0) {
           // End game
-          printf("Game ended\n");
+          printf("########## Game ended after %d rounds ##########\n", round);
+          round = 0;
           sleep(10);
           break;
         }
