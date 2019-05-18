@@ -1,31 +1,16 @@
 # ServerNetwork
-CITS3002 Computer Networks Project - Ethan and Daphne
+CITS3002 Computer Networks Project - Ethan Chin - 22248878 & Daphne Yu - 22531975
+- RNG Battle Royal server and client using Socket Programming
 
 Project Link: https://lms.uwa.edu.au/webapps/blackboard/content/listContent.jsp?course_id=_43175_1&content_id=_1380402_1&mode=reset
 
 Report/Planning: https://docs.google.com/document/d/1vzbHldkf8qaPMqxqFIoJyxORLYxfj_NTtlPFrRdlR2g/edit?usp=sharing
 
+Final Report: https://docs.google.com/document/d/1WvFUNbHRLrIuh3LAbfHXGnjhsimZ-e9qe5vU7McdR-g/edit?usp=sharing
+
 Files:
 * `basic_server.c` - Server written in C
 * `socket_client.py` - Client written in Python
-
-Todo List:
-* Tier 1
-  - Server can receive a client connection and send a game initialisation message
-  - Update the client that the game has started
-  - Receive moves from players (allowed a basic timeout for moves). If a player fails to make a move,
-they are eliminated from the game
-  - Updates game-state based on moves from players
-  - Updates players on the outcome of a round
-  - Is able to tear down a finished game
-* Tier 2
-* Tier 3
-* Tier 4
-* Report
-
-Resources:
-* How git works: https://www.youtube.com/watch?v=0fKg7e37bQE&t=3s&ab_channel=LearnCode.academy
-* About sockets: http://www.tutorialspoint.com/unix_sockets/socket_server_example.htm
 
 Steps to setup:
 1. `git clone https://github.com/LightXEthan/ServerNetwork`
