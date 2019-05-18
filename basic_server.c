@@ -1,15 +1,11 @@
 /**
-* Based on code found at https://github.com/mafintosh/echo-servers.c (Copyright (c) 2014 Mathias Buus)
-* Copyright 2019 Nicholas Pritchard, Ryan Bunney
+* CITS3002 Computer Networks Project
+* Written by Ethan Chin 22248878 and Daphne Yu 22531975
+*
 **/
 
 /**
- * @brief A simple example of a network server written in C implementing a basic echo
- *
- * This is a good starting point for observing C-based network code but is by no means complete.
- * We encourage you to use this as a starting point for your project if you're not sure where to start.
- * Food for thought:
- *   - Can we wrap the action of sending ALL of out data and receiving ALL of the data?
+ * @brief RNG Battle Royal server using socket programming
  */
 
 #include <stdio.h>
