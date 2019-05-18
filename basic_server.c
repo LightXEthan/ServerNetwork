@@ -221,6 +221,8 @@ int main (int argc, char *argv[]) {
       // Child process, will become host
       close(server_fd);
       host = true;
+      close(p1[1]);
+      close(p2[0]);
     }
     // Parent process will continue
 
@@ -287,7 +289,7 @@ int main (int argc, char *argv[]) {
 
             // Creates clientStates
             clientState.client_id = client_id;
-            clientState.nlives = 2;
+            clientState.nlives = 3;
 
         } else {
             // Rejects when game has already started
@@ -308,12 +310,11 @@ int main (int argc, char *argv[]) {
         char players[PIPE_BUFF_SIZE];
         sprintf(players, "%d",nplayers);
         write(p1[1], players, PIPE_BUFF_SIZE);
-        printf("Client Wrote\n");
 
         char inbuf[PIPE_BUFF_SIZE];
         read(p2[0],inbuf, PIPE_BUFF_SIZE);
         nplayers = atoi(inbuf);
-        printf("Read from host: %d\n", nplayers);
+        //printf("Read from host: %d\n", nplayers);
 
         //single player mode: given 3 lives, win if survive 5 rounds
         if(nplayers == 1){
@@ -334,7 +335,7 @@ int main (int argc, char *argv[]) {
         // Send start to players
         buf[0] = '\0';
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
-        err = send(client_fd, buf, strlen(buf), 0); // Send another thing
+        err = send(client_fd, buf, strlen(buf), 0);
         ERR_CHECK_WRITE;
 
 
@@ -342,31 +343,17 @@ int main (int argc, char *argv[]) {
         /*----------------------------------------------------------------------------------------*/
         while (true) {
             round++;
-            //CLIENT READS THE DICE FROM HOST
+
+            //ROLLS THE DICE
             /*----------------------------------------------------------------------------------------*/
-            //TEST
             int dice[2];
             srand(time(0));
             dice[0] = rand() % 6 + 1;
             dice[1] = rand() % 6 + 1;
-            printf("Dice: %d, %d\n", dice[0], dice[1]);
+            printf("Dice rolled: %d, %d\n", dice[0], dice[1]);
             int diceSum = dice[0] + dice[1];
-            /*
-            char dice1[PIPE_BUFF_SIZE];
-            char dice2[PIPE_BUFF_SIZE];
-
-            read(p1[0],dice1,PIPE_BUFF_SIZE);
-            dice[0] = atoi(dice1);
-            sleep(0.1);
-            read(p1[0],dice2,PIPE_BUFF_SIZE);
-            dice[1] = atoi(dice2);
-            printf("Client Dice read\n");
-
-            int diceSum = dice[0] + dice[1];
-            */
 
             // Waits for move from player
-
             struct timeval mvtout;
             mvtout.tv_sec = 10; //wait move response for 10 sec
             mvtout.tv_usec = 0;
@@ -386,7 +373,6 @@ int main (int argc, char *argv[]) {
 
             if (moved) {
               // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
-              printf("%s\n", buf);
               watch_dog(buf, clientState.client_id, &number, &action);
             }
             //DECIDE PASS, FAIL, ELIM
@@ -418,7 +404,6 @@ int main (int argc, char *argv[]) {
             } else if (clientState.nlives <= 1) {
               // Eliminate player from game
               sprintf(msg, "%s", "%d,ELIM");
-
             }
 
             // players send the result to the host
@@ -426,11 +411,10 @@ int main (int argc, char *argv[]) {
 
             //PLAYERS' UPDATE
             /*----------------------------------------------------------------------------------------*/
-            printf("Reading\n");
             char np[PIPE_BUFF_SIZE];
             read(p2[0], np, PIPE_BUFF_SIZE);
             nplayers = atoi(np);
-            printf("Client nplayers Read: %d\n", nplayers);
+            //printf("Client nplayers Read: %d\n", nplayers);
 
             bool gameover = false;
 
@@ -472,7 +456,8 @@ int main (int argc, char *argv[]) {
               gameover = true;
             }
 
-            printf("msg: %s\n",msg);
+            //printf("msg: %s\n",msg);
+            // Sends the outcome to the player
             send_message(msg, client_fd, clientState.client_id);
 
             if(gameover) break;//if game over, go to clean memory part
@@ -503,8 +488,7 @@ int main (int argc, char *argv[]) {
       timeout.tv_usec = 0;
       char inbuf[PIPE_BUFF_SIZE];
       bool singlemode = false;
-      close(p1[1]);
-      close(p2[0]);
+
 
       memcpy(shmem, "GNS", 4);
       printf("Lobby open...\n");
@@ -535,9 +519,9 @@ int main (int argc, char *argv[]) {
       sprintf(buff, "%d",nplayers);
 
       for (int i = 0; i < nplayers; i++) {
-        printf("Host sent players: %d\n", nplayers);
         write(p2[1], buff, PIPE_BUFF_SIZE);
       }
+      printf("Host sent players: %d\n", nplayers);
 
       if (nplayers == 1){
         singlemode = true;
@@ -555,29 +539,6 @@ int main (int argc, char *argv[]) {
       /*----------------------------------------------------------------------------------------*/
       while (true) {
         round++;
-        /*
-        int dice[2];
-        char dice1[3];
-        char dice2[3];
-
-        srand(time(0));
-        dice[0] = rand() % 6 + 1;
-        dice[1] = rand() % 6 + 1;
-
-        printf("Dice one roll: %d\n",dice[0]);
-        printf("Dice two roll: %d\n",dice[1]);
-
-        // Host pipes dice roll to other players
-        // Each child gets the dice
-        for (int i = 0; i < nplayers; i++) {
-          sprintf(dice1, "%d", dice[0]);
-          write(p1[1],dice1,PIPE_BUFF_SIZE);
-          sleep(0.1);
-          sprintf(dice2, "%d", dice[1]);
-          write(p1[1],dice2,PIPE_BUFF_SIZE);
-        }
-        sleep(1);
-        */
 
         //HOST MANAGE GAME RESULT
         /*----------------------------------------------------------------------------------------*/
@@ -593,9 +554,9 @@ int main (int argc, char *argv[]) {
 
         // Count number of each result
         timeout.tv_usec = 0;
-        timeout.tv_sec = 12; // Timeout time
+        timeout.tv_sec = 11; // Timeout time
 
-        printf("Host: Waiting for player actions.\n");
+        printf("Host: Waiting for player actions...\n");
         while (true) {
           int rv = select(p1[0]+1, &set, NULL, NULL, &timeout);
           if (rv == -1) {
@@ -606,7 +567,7 @@ int main (int argc, char *argv[]) {
 
           } else {
             read(p1[0], rmsg, PIPE_BUFF_SIZE);
-            printf("Host Read: %s\n", rmsg);
+            //printf("Host Read: %s\n", rmsg);
 
             // Count number of outcomes
             if (strstr(rmsg, "ELIM")) {
@@ -626,7 +587,7 @@ int main (int argc, char *argv[]) {
         // Finds new number of playersAlive
         nplayers = elims + pass + fails;
         playersAlive = nplayers;
-        printf("Host N: %d, %d, %d\n", elims, pass, fails);
+        //printf("Host N: %d, %d, %d\n", elims, pass, fails);
 
         bool edge = false;
         // If everyone is elim, then everyone gets vict
@@ -641,13 +602,13 @@ int main (int argc, char *argv[]) {
         //HOST BROADCAST NEW NO.PLAYERS
         /*----------------------------------------------------------------------------------------*/
         // Send new player count to each process
-        char np[PIPE_BUFF_SIZE]; // Number of players in string, increase size of scaling
+        char np[PIPE_BUFF_SIZE];
         sprintf(np, "%d", nplayers);
         for (int i = 0; i < playersAlive; i++) {
           write(p2[1], np, PIPE_BUFF_SIZE);
         }
 
-        printf("Sent new player count, %d\n", nplayers);
+        printf("Round ended. Players alive: %d\n", nplayers);
 
         sleep(2);
 
