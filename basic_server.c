@@ -269,7 +269,7 @@ int main (int argc, char *argv[]) {
         //START READING MESSAGE FROM CLIENTS
         /*----------------------------------------------------------------------------------------*/
         buf = calloc(BUFFER_SIZE, sizeof(char)); // Clear our buffer so we don't accidentally send/print garbage
-        int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Try to read from the incoming client
+        int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Read from the incoming client
         ERR_CHECK_READ;
 
 
@@ -322,7 +322,7 @@ int main (int argc, char *argv[]) {
         }
         else if(nplayers < MIN_PLAYERS){
           err = send(client_fd, "CANCEL", 6, 0);
-          ERR_CHECK_WRITE; 
+          ERR_CHECK_WRITE;
           printf("Gameover,cleaning memory......\n");
           free(buf);
           if (close(client_fd) != 0){
@@ -330,12 +330,12 @@ int main (int argc, char *argv[]) {
           }
           exit(EXIT_SUCCESS);
         }
-        else{
-          buf[0] = '\0';
-          sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
-          err = send(client_fd, buf, strlen(buf), 0); // Send another thing
-          ERR_CHECK_WRITE;
-        }
+
+        // Send start to players
+        buf[0] = '\0';
+        sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
+        err = send(client_fd, buf, strlen(buf), 0); // Send another thing
+        ERR_CHECK_WRITE;
 
 
         //LOOP EACH GAME ROUND
@@ -476,7 +476,7 @@ int main (int argc, char *argv[]) {
             send_message(msg, client_fd, clientState.client_id);
 
             if(gameover) break;//if game over, go to clean memory part
-            
+
 
         }//end of game handling while
 
@@ -526,7 +526,7 @@ int main (int argc, char *argv[]) {
           // Gets the highest number which is the player count
           nplayers++;
         }
-      }     
+      }
 
       // Check min number of players
 
@@ -615,6 +615,10 @@ int main (int argc, char *argv[]) {
               pass++;
             } else if (strstr(rmsg, "FAIL")) {
               fails++;
+            }
+
+            if (singlemode) {
+              sleep(1); break;
             }
           }
         }
