@@ -172,6 +172,26 @@ int initiate_sock(int port){
   return server_fd;
 }
 
+//return -1 if no move after timeout, otherwise 0
+char* wait_move(int client_fd){
+	struct timeval mvtout;
+    mvtout.tv_sec = 10; //wait move response for 10 sec
+    mvtout.tv_usec = 0; 
+
+    char *buf = calloc(BUFFER_SIZE, sizeof(char));
+  	memset(buf, 0, BUFFER_SIZE);
+
+    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));   
+    int rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
+
+    if( rec < 0){
+      fprintf(stderr,"No move response from the client. LIVE - 1\n");
+      free(buf);
+      return NULL;
+  	}
+  	return buf;
+}
+
 //MAIN
 /*----------------------------------------------------------------------------------------*/
 int main (int argc, char *argv[]) {
@@ -360,7 +380,7 @@ int main (int argc, char *argv[]) {
             int diceSum = dice[0] + dice[1];
 
             // Waits for move from player
-            struct timeval mvtout;
+            /*struct timeval mvtout;
             mvtout.tv_sec = 10; //wait move response for 10 sec
             mvtout.tv_usec = 0;
             bool moved = true;
@@ -372,7 +392,10 @@ int main (int argc, char *argv[]) {
             if( rec < 0){
               fprintf(stderr,"No move response from the client. LIVE - 1\n");
               moved = false;
-            }
+            }*/
+            bool moved = true;
+            buf = wait_move(client_fd);
+            if(buf == NULL) moved = false;
 
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
