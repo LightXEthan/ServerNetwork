@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <math.h>
 #include <time.h>
-#include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
 
@@ -139,6 +138,40 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
   }
 }
 
+//upon success creation return server file descriptor, otherwise, -1
+int initiate_sock(int port){
+  int server_fd, opt_val, err;
+  struct sockaddr_in server;
+
+  server_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+  if (server_fd < 0){
+    return -1;
+  }
+
+  server.sin_family = AF_INET;
+  server.sin_port = htons(port);
+  server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  opt_val = 1;
+  setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof opt_val);
+
+  err = bind(server_fd, (struct sockaddr *) &server, sizeof(server));
+  if (err < 0){
+    fprintf(stderr,"Could not bind socket\n");
+    return -1;
+  }
+
+  err = listen(server_fd, 128);
+  if (err < 0){
+    fprintf(stderr,"Could not listen on socket\n");
+    return -1;
+  }
+
+  printf("Server is listening on %d\n", port);
+  return server_fd;
+}
+
 //MAIN
 /*----------------------------------------------------------------------------------------*/
 int main (int argc, char *argv[]) {
@@ -149,44 +182,22 @@ int main (int argc, char *argv[]) {
     }
 
     int port = atoi(argv[1]);
-    int server_fd, client_fd, err, opt_val;
-    struct sockaddr_in server, client;
+    int server_fd, client_fd, err;
+    struct sockaddr_in client;
     char *buf;
     int pid, hid;
     int nplayers = 0;
     bool host = false;
     int p1[2], p2[2];
 
-    //CREATE SOCKET, SET, BIND, LISTEN
+    //CREATE SOCKET
     /*----------------------------------------------------------------------------------------*/
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    server_fd = initiate_sock(port);
     if (server_fd < 0){
       fprintf(stderr,"Could not create socket\n");
       exit(EXIT_FAILURE);
     }
-
-    server.sin_family = AF_INET;
-    server.sin_port = htons(port);
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    opt_val = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof opt_val);
-
-    err = bind(server_fd, (struct sockaddr *) &server, sizeof(server));
-    if (err < 0){
-      fprintf(stderr,"Could not bind socket\n");
-      exit(EXIT_FAILURE);
-    }
-
-    err = listen(server_fd, 128);
-    if (err < 0){
-      fprintf(stderr,"Could not listen on socket\n");
-      exit(EXIT_FAILURE);
-    }
-
-    printf("Server is listening on %d\n", port);
-
 
     //PIPE & SHARED MEMORY
     /*----------------------------------------------------------------------------------------*/
@@ -255,7 +266,7 @@ int main (int argc, char *argv[]) {
           continue;
         }
 
-        //VARIABLES
+        //GAME VARIABLES
         /*----------------------------------------------------------------------------------------*/
         int round = 0;
         struct ClientState {
@@ -280,8 +291,7 @@ int main (int argc, char *argv[]) {
 
             memset(buf, 0, BUFFER_SIZE);
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
-            err = send(client_fd, buf, strlen(buf), 0);
-            ERR_CHECK_WRITE;
+            send_message(buf, client_fd, clientState.client_id);
 
             // Creates clientStates
             clientState.client_id = client_id;
@@ -296,9 +306,8 @@ int main (int argc, char *argv[]) {
 
         //COUNTING PLAYERS & TIMEOUT & DECIDE START OR CANCEL
         /*----------------------------------------------------------------------------------------*/
-        // Pipe to all processes that the game as started
+        // Pipe to all processes that the game has started
 
-        bool singlemode = false;
         close(p1[0]);
         close(p2[1]);
 
@@ -307,12 +316,14 @@ int main (int argc, char *argv[]) {
         sprintf(players, "%d",nplayers);
         write(p1[1], players, PIPE_BUFF_SIZE);
 
+        //read in finalised nplayers
         char inbuf[PIPE_BUFF_SIZE];
         read(p2[0],inbuf, PIPE_BUFF_SIZE);
         nplayers = atoi(inbuf);
         //printf("Read from host: %d\n", nplayers);
 
         //single player mode: given 3 lives, win if survive 5 rounds
+        bool singlemode = false;
         if(nplayers == 1){
           singlemode = true;
           clientState.nlives = 3;
@@ -329,10 +340,9 @@ int main (int argc, char *argv[]) {
         }
 
         // Send start to players
-        buf[0] = '\0';
+        memset(buf, 0, BUFFER_SIZE);
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
-        err = send(client_fd, buf, strlen(buf), 0);
-        ERR_CHECK_WRITE;
+        send_message(buf, client_fd, clientState.client_id);
 
 
         //LOOP EACH GAME ROUND
@@ -412,11 +422,11 @@ int main (int argc, char *argv[]) {
             nplayers = atoi(np);
             //printf("Client nplayers Read: %d\n", nplayers);
 
-            bool gameover = false;
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
             char winner[BUFFER_SIZE];
+            bool gameover = false;
 
             if (!singlemode && nplayers == 0) {
               // Everyone wins if all get eliminated
@@ -612,25 +622,28 @@ int main (int argc, char *argv[]) {
           // End game
 
           //read the final game result from the pipe p1
-          printf("########## Game ended after %d rounds ##########\n", round);
+          printf("\t#######################################\n");
+          printf("\t##     Game ended after %2d rounds    ##\n",round);
           round = 0;
           if(edge){//when more than one player died at the same time
             for (int i = 0; i < elims; i++){
               read(p1[0], rmsg, PIPE_BUFF_SIZE);
-              printf("%s wins!\n", rmsg);
+              printf("\t##\t\t%swins!\t     ##\n", rmsg);
             }
           }
           else{//one player survive at the end
               read(p1[0], rmsg, PIPE_BUFF_SIZE);
-              printf("%s wins!\n", rmsg);
+              printf("\t##\t\t%swins!\t     ##\n", rmsg);
           }
 
-          printf("########## Next game starts in 10 seconds ##########\n");
+          printf("\t##  Next game starts in 10 seconds   ##\n");
+          printf("\t#######################################\n");
           sleep(10);
           break;
         } else if (singlemode && nplayers == 0) {
           // End game
-          printf("########## Game ended after %d rounds ##########\n", round);
+          printf("########### Game ended after %d rounds ##########\n", round);
+          printf("######## Next game starts in 10 seconds ########\n");
           round = 0;
           sleep(10);
           break;

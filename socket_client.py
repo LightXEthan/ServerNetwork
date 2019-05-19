@@ -1,18 +1,9 @@
 """
-This is a simple example of a client program written in Python.
-Again, this is a very basic example to complement the 'basic_server.c' example.
+CITS3002 Computer Networks Project
+Written by Ethan Chin 22248878 and Daphne Yu 22531975
 
-
-When testing, start by initiating a connection with the server by sending the "init" message outlined in
-the specification document. Then, wait for the server to send you a message saying the game has begun.
-
-Once this message has been read, plan out a couple of turns on paper and hard-code these messages to
-and from the server (i.e. play a few rounds of the 'dice game' where you know what the right and wrong
-dice rolls are). You will be able to edit this trivially later on; it is often easier to debug the code
-if you know exactly what your expected values are.
-
-From this, you should be able to bootstrap message-parsing to and from the server whilst making it easy to debug.
-Then, start to add functions in the server code that actually 'run' the game in the background.
+@brief: socket client for basic_server.c
+		extended version of the given example code
 """
 
 
@@ -26,10 +17,8 @@ server_address = ('localhost', 4444)
 print ('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
-# client status
 client_id = 0
-# make it -1 for now, update when get the start message from the server
-nlives = -1
+nlives = -1		# update upon get the start message from the server
 
 # Sends init to server connect to a game
 message = 'INIT'.encode()
@@ -47,10 +36,12 @@ try:
         gameInfo = ["",""]
 
         while amount_received < amount_expected:
-            # if recv() return 0 bytes -> server close connection -> no more receive
-            # receiving 0 bytes -> connection has been broken/indicate end of communication (closed socket cannot been reused)
 
-            data = sock.recv(1024)
+            try:
+            	data = sock.recv(1024)
+            except ConnectionResetError:
+            	print("Lost connection with server.")
+            	exit = True
 
             if data == 0:
               print("Lost connection with server")
@@ -75,7 +66,7 @@ try:
                 # first move
                 move = str(input("Your move: "))
 
-                sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) # Client has ID 231
+                sock.sendall("{0},MOV,{1}".format(client_id,move).encode()) 
 
             elif "PASS" in server_msg:
                 # make move
@@ -129,14 +120,14 @@ try:
             elif "VICT" in server_msg or gameInfo[1] == 1:
                 # ascii art credit: https://www.asciiart.eu/computers/smileys
                 print('''
-   __          __  _____   _   _        _____
-   \ \        / / |_   _| | \ | |     .'     '.
-    \ \  /\  / /    | |   |  \| |    /  o   o  \\
-     \ \/  \/ /     | |   | . ` |   |           |
-      \  /\  /     _| |_  | |\  |   |  \     /  |
-       \/  \/     |_____| |_| \_|    \  '---'  /
-                                      '._____.'
-                                    ''')
+__          __  _____   _   _      _____
+\ \        / / |_   _| | \ | |   .'     '.
+ \ \  /\  / /    | |   |  \| |  /  o   o  \\
+  \ \/  \/ /     | |   | . ` | |           |
+   \  /\  /     _| |_  | |\  | |  \     /  |
+    \/  \/     |_____| |_| \_|  \  '---'  /
+                                 '._____.'
+                                ''')
 
                 exit = True
                 break
@@ -150,11 +141,12 @@ try:
                 print("Not enough player, game cannot start.")
                 exit = True
                 break
-                # attempt to connect again??
 
             else:
                 print ( 'received "%s"' % server_msg)
-                sleep(5) # Sleep time in seconds
+                print("Unexpected message.")
+                exit = True
+                break
 
         if exit:
             break
