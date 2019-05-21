@@ -46,12 +46,20 @@ int send_message(char *msg, int client_fd, int client_id) {
 }
 
 /*----------------------------------------------------------------------------------------*/
-// Anti-Cheat function
-void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
+// Closes the socket and exits the process
+void close_socket(int client_fd) {
+  if (close(client_fd) != 0){
+      fprintf(stderr,"Socket close unsuccessfully.\n");
+  }
+  exit(EXIT_SUCCESS);
+}
+
+/*----------------------------------------------------------------------------------------*/
+// Anti-Cheat function, returns 0 if invalid packet, 1 otherwise
+int watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
   if (strstr(buf, "MOV") == NULL) {  // Check if the message contained 'move'
       fprintf(stderr, "Unexpected message, terminating\n");
-      free(buf);
-      exit(EXIT_FAILURE); //Kick player instead Tier4
+      return 0;
   }
 
   char s[2] = ",";
@@ -67,8 +75,7 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         if (client_id != atoi(tok)) {
           // Kick for cheating
           printf("Kicked for cheating\n");
-          free(buf);
-          exit(EXIT_SUCCESS);
+          return 0;
         }
         break;
 
@@ -77,8 +84,7 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         if (strcmp("MOV",tok) != 0) {
           // Kick for cheating
           printf("Kicked for cheating\n");
-          free(buf);
-          exit(EXIT_SUCCESS);
+          return 0;
         }
         break;
 
@@ -96,8 +102,7 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
         } else {
           // kick for cheating
           printf("Kicked for cheating\n");
-          free(buf);
-          exit(EXIT_SUCCESS);
+          return 0;
         }
         break;
 
@@ -110,22 +115,19 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
           if (*number < 1 || 6 < *number) {
             // Player entered invalid number
             fprintf(stderr, "Invalid number.\n");
-            free(buf);
-            exit(EXIT_FAILURE);
+            return 0;
           }
         } else {
           // kick for cheating
           printf("Kicked for cheating\n");
-          free(buf);
-          exit(EXIT_FAILURE);
+          return 0;
         }
         break;
 
       default:
         // Kick for cheating
         printf("Kicked for cheating\n");
-        free(buf);
-        exit(EXIT_FAILURE);
+        return 0;
 
     }
     tok = strtok(NULL,s);
@@ -133,9 +135,9 @@ void watch_dog(char* buf, int client_id, int *number, char (*action)[]) {
   }
   if (counter == 2) {
     printf("Kicked for cheating\n");
-    free(buf);
-    exit(EXIT_SUCCESS);
+    return 0;
   }
+  return 1;
 }
 
 //upon success creation return server file descriptor, otherwise, -1
@@ -176,12 +178,12 @@ int initiate_sock(int port){
 char* wait_move(int client_fd){
 	struct timeval mvtout;
     mvtout.tv_sec = 10; //wait move response for 10 sec
-    mvtout.tv_usec = 0; 
+    mvtout.tv_usec = 0;
 
     char *buf = calloc(BUFFER_SIZE, sizeof(char));
   	memset(buf, 0, BUFFER_SIZE);
 
-    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));   
+    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));
     int rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
 
     if( rec < 0){
@@ -301,7 +303,6 @@ int main (int argc, char *argv[]) {
         int rec = recv(client_fd, buf, BUFFER_SIZE, 0);    // Read from the incoming client
         ERR_CHECK_READ;
 
-
         //INIT & REJECT
         /*----------------------------------------------------------------------------------------*/
         // Receives client request to enter game
@@ -311,7 +312,7 @@ int main (int argc, char *argv[]) {
 
             memset(buf, 0, BUFFER_SIZE);
             sprintf(buf, "WELCOME,%d",client_id); // Gives client_id to the clients
-            send_message(buf, client_fd, clientState.client_id);
+            send_message(buf, client_fd, client_id);
 
             // Creates clientStates
             clientState.client_id = client_id;
@@ -363,7 +364,7 @@ int main (int argc, char *argv[]) {
         memset(buf, 0, BUFFER_SIZE);
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
         send_message(buf, client_fd, clientState.client_id);
-
+        free(buf);
 
         //LOOP EACH GAME ROUND
         /*----------------------------------------------------------------------------------------*/
@@ -402,8 +403,13 @@ int main (int argc, char *argv[]) {
 
             if (moved) {
               // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
-              watch_dog(buf, clientState.client_id, &number, &action);
+              int wd = watch_dog(buf, clientState.client_id, &number, &action);
+              if (wd == 0) {
+                free(buf);
+                close_socket(client_fd);
+              }
             }
+            free(buf);
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
@@ -496,10 +502,7 @@ int main (int argc, char *argv[]) {
 
         printf("Gameover,cleaning memory......\n");
         free(buf);
-        if (close(client_fd) != 0){
-            fprintf(stderr,"Socket close unsuccessfully.\n");
-        }
-        exit(EXIT_SUCCESS);
+        close_socket(client_fd);
     }
     // End of while Loop
 
