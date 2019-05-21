@@ -322,6 +322,7 @@ int main (int argc, char *argv[]) {
             // Rejects when game has already started
             err = send(client_fd, "REJECT", 6, 0);
             ERR_CHECK_WRITE;
+            free(buf);
             exit(EXIT_FAILURE);
         }
 
@@ -333,14 +334,15 @@ int main (int argc, char *argv[]) {
         close(p2[1]);
 
         // Everyone send how many players they know to the pipe
-        char players[PIPE_BUFF_SIZE];
-        sprintf(players, "%d",nplayers);
-        write(p1[1], players, PIPE_BUFF_SIZE);
+        char *pipe_buf = calloc(PIPE_BUFF_SIZE, sizeof(char));
+        sprintf(pipe_buf, "%d",nplayers);
+        write(p1[1], pipe_buf, PIPE_BUFF_SIZE);
 
         //read in finalised nplayers
-        char inbuf[PIPE_BUFF_SIZE];
-        read(p2[0],inbuf, PIPE_BUFF_SIZE);
-        nplayers = atoi(inbuf);
+        //char inbuf[PIPE_BUFF_SIZE];
+        memset(pipe_buf, 0, PIPE_BUFF_SIZE);
+        read(p2[0],pipe_buf, PIPE_BUFF_SIZE);
+        nplayers = atoi(pipe_buf);
         //printf("Read from host: %d\n", nplayers);
 
         //single player mode: given 3 lives, win if survive 5 rounds
@@ -364,7 +366,8 @@ int main (int argc, char *argv[]) {
         memset(buf, 0, BUFFER_SIZE);
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
         send_message(buf, client_fd, clientState.client_id);
-        free(buf);
+
+        char *msg = calloc(PIPE_BUFF_SIZE, sizeof(char));
 
         //LOOP EACH GAME ROUND
         /*----------------------------------------------------------------------------------------*/
@@ -395,25 +398,28 @@ int main (int argc, char *argv[]) {
               moved = false;
             }*/
             bool moved = true;
+            free(buf);
             buf = wait_move(client_fd);
             if(buf == NULL) moved = false;
 
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
+            memset(action, 0, 5);
 
             if (moved) {
               // Watch-Dog, anti-cheat detection, checks that the player sent a vaild packet
               int wd = watch_dog(buf, clientState.client_id, &number, &action);
               if (wd == 0) {
                 free(buf);
+                free(msg);
+                free(pipe_buf);
                 close_socket(client_fd);
               }
             }
-            free(buf);
+
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
-            char msg[8];
             memset(msg, 0, 8);
             if (strcmp(action,"DOUB")==0 && dice[0] == dice[1]) {
               // Doubles rolled and pass is sent
@@ -446,9 +452,9 @@ int main (int argc, char *argv[]) {
 
             //PLAYERS' UPDATE
             /*----------------------------------------------------------------------------------------*/
-            char np[PIPE_BUFF_SIZE];
-            read(p2[0], np, PIPE_BUFF_SIZE);
-            nplayers = atoi(np);
+            memset(pipe_buf, 0, PIPE_BUFF_SIZE);
+            read(p2[0], pipe_buf, PIPE_BUFF_SIZE);
+            nplayers = atoi(pipe_buf);
             //printf("Client nplayers Read: %d\n", nplayers);
 
 
@@ -502,6 +508,8 @@ int main (int argc, char *argv[]) {
 
         printf("Gameover,cleaning memory......\n");
         free(buf);
+        free(pipe_buf);
+        free(msg);
         close_socket(client_fd);
     }
     // End of while Loop
@@ -548,6 +556,7 @@ int main (int argc, char *argv[]) {
 
       // Start the game, host sends number of players to players
       char buff[PIPE_BUFF_SIZE];
+      memset(buff, 0, BUFFER_SIZE);
       sprintf(buff, "%d",nplayers);
 
       for (int i = 0; i < nplayers; i++) {
@@ -581,6 +590,7 @@ int main (int argc, char *argv[]) {
         int pass = 0;
         int playersAlive = 0;
         char rmsg[PIPE_BUFF_SIZE];
+        memset(rmsg, 0, PIPE_BUFF_SIZE);
         FD_ZERO(&set);
         FD_SET(p1[0],&set);
 
