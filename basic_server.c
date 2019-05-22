@@ -175,12 +175,12 @@ int initiate_sock(int port){
 }
 
 //return -1 if no move after timeout, otherwise 0
-char* wait_move(int client_fd){
+int wait_move(int client_fd, char *buf){
 	struct timeval mvtout;
     mvtout.tv_sec = 10; //wait move response for 10 sec
     mvtout.tv_usec = 0;
 
-    char *buf = calloc(BUFFER_SIZE, sizeof(char));
+    //char *buf = calloc(BUFFER_SIZE, sizeof(char));
   	memset(buf, 0, BUFFER_SIZE);
 
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));
@@ -189,9 +189,9 @@ char* wait_move(int client_fd){
     if( rec < 0){
       fprintf(stderr,"No move response from the client. LIVE - 1\n");
       free(buf);
-      return NULL;
+      return 0;
   	}
-  	return buf;
+  	return 1;
 }
 
 //MAIN
@@ -398,9 +398,8 @@ int main (int argc, char *argv[]) {
               moved = false;
             }*/
             bool moved = true;
-            free(buf);
-            buf = wait_move(client_fd);
-            if(buf == NULL) moved = false;
+            wait_move(client_fd,buf);
+            if(buf == 0) moved = false;
 
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
@@ -488,7 +487,7 @@ int main (int argc, char *argv[]) {
 
             } else if (singlemode && nplayers == 1 && (strstr(msg, "PASS") || strstr(msg, "FAIL")) && round == 5) {
               // single player mode: if in round 5 after action the player's life still >= 0, the player win
-              printf("Champion! Survived 5 rounds!");
+              printf("Champion! Survived 5 rounds!\n");
               sprintf(msg, "%s", "%d,VICT");
               gameover = true;
 
