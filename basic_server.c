@@ -321,6 +321,7 @@ int main (int argc, char *argv[]) {
             // Rejects when game has already started
             err = send(client_fd, "REJECT", 6, 0);
             ERR_CHECK_WRITE;
+            free(buf);
             exit(EXIT_FAILURE);
         }
 
