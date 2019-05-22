@@ -1,6 +1,7 @@
 # ServerNetwork
 CITS3002 Computer Networks Project - Ethan Chin - 22248878 & Daphne Yu - 22531975
 - RNG Battle Royal server and client using Socket Programming
+- Marking preferred in linux (Ubuntu and Mac was used to develop this)
 
 Project Link: https://lms.uwa.edu.au/webapps/blackboard/content/listContent.jsp?course_id=_43175_1&content_id=_1380402_1&mode=reset
 
