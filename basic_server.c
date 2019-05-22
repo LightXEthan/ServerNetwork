@@ -175,12 +175,12 @@ int initiate_sock(int port){
 }
 
 //return -1 if no move after timeout, otherwise 0
-char* wait_move(int client_fd){
+bool wait_move(int client_fd, char *buf){
 	struct timeval mvtout;
     mvtout.tv_sec = 10; //wait move response for 10 sec
     mvtout.tv_usec = 0;
 
-    char *buf = calloc(BUFFER_SIZE, sizeof(char));
+    //char *buf = calloc(BUFFER_SIZE, sizeof(char));
   	memset(buf, 0, BUFFER_SIZE);
 
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));
@@ -189,9 +189,9 @@ char* wait_move(int client_fd){
     if( rec < 0){
       fprintf(stderr,"No move response from the client. LIVE - 1\n");
       free(buf);
-      return NULL;
+      return false;
   	}
-  	return buf;
+  	return true;
 }
 
 //MAIN
@@ -364,7 +364,6 @@ int main (int argc, char *argv[]) {
         memset(buf, 0, BUFFER_SIZE);
         sprintf(buf, "START,%d,%d\n",nplayers,clientState.nlives);
         send_message(buf, client_fd, clientState.client_id);
-        free(buf);
 
         //LOOP EACH GAME ROUND
         /*----------------------------------------------------------------------------------------*/
@@ -392,9 +391,8 @@ int main (int argc, char *argv[]) {
               fprintf(stderr,"No move response from the client. LIVE - 1\n");
               moved = false;
             }*/
-            bool moved = true;
-            buf = wait_move(client_fd);
-            if(buf == NULL) moved = false;
+
+            bool moved = wait_move(client_fd, buf);
 
             int number; // Stores the number selected by the player
             char action[5]; // Stores the action taken by the player
@@ -407,7 +405,7 @@ int main (int argc, char *argv[]) {
                 close_socket(client_fd);
               }
             }
-            free(buf);
+
             //DECIDE PASS, FAIL, ELIM
             /*----------------------------------------------------------------------------------------*/
             // Calculate score using the players move
