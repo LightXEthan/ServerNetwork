@@ -377,7 +377,7 @@ int main (int argc, char *argv[]) {
             srand(time(0));
             dice[0] = rand() % 6 + 1;
             dice[1] = rand() % 6 + 1;
-            printf("Dice rolled: %d, %d\n", dice[0], dice[1]);
+            //printf("Dice rolled: %d, %d\n", dice[0], dice[1]);
             int diceSum = dice[0] + dice[1];
 
             // Waits for move from player
@@ -450,6 +450,8 @@ int main (int argc, char *argv[]) {
             nplayers = atoi(np);
             //printf("Client nplayers Read: %d\n", nplayers);
 
+            // Display purposes only
+            printf("Dice rolled: %d, %d\n", dice[0], dice[1]);
 
             //WIN CONDITIONS
             /*----------------------------------------------------------------------------------------*/
@@ -585,6 +587,8 @@ int main (int argc, char *argv[]) {
         memset(rmsg, 0, PIPE_BUFF_SIZE);
         FD_ZERO(&set);
         FD_SET(p1[0],&set);
+
+
 
         // Count number of each result
         timeout.tv_usec = 0;
