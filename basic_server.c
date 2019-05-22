@@ -380,19 +380,6 @@ int main (int argc, char *argv[]) {
             //printf("Dice rolled: %d, %d\n", dice[0], dice[1]);
             int diceSum = dice[0] + dice[1];
 
-            // Waits for move from player
-            /*struct timeval mvtout;
-            mvtout.tv_sec = 10; //wait move response for 10 sec
-            mvtout.tv_usec = 0;
-            bool moved = true;
-            setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &mvtout, sizeof(struct timeval));
-            memset(buf, 0, BUFFER_SIZE);
-            rec = recv(client_fd, buf, BUFFER_SIZE, 0); // See if we have a response
-            if( rec < 0){
-              fprintf(stderr,"No move response from the client. LIVE - 1\n");
-              moved = false;
-            }*/
-
             bool moved = wait_move(client_fd, buf);
 
             int number; // Stores the number selected by the player
