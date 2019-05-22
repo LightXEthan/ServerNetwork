@@ -356,9 +356,7 @@ int main (int argc, char *argv[]) {
           ERR_CHECK_WRITE;
           printf("Gameover,cleaning memory......\n");
           free(buf);
-          if (close(client_fd) != 0){
-            fprintf(stderr,"Socket close unsuccessfully.\n");
-          }
+          close_socket(client_fd);
           exit(EXIT_SUCCESS);
         }
 
@@ -511,7 +509,6 @@ int main (int argc, char *argv[]) {
       memset(inbuf, 0, PIPE_BUFF_SIZE);
       bool singlemode = false;
 
-
       memcpy(shmem, "GNS", 4);
       printf("Lobby open...\n");
 
@@ -534,18 +531,18 @@ int main (int argc, char *argv[]) {
         }
       }
 
-      // Check min number of players
-
       // Start the game, host sends number of players to players
       char buff[PIPE_BUFF_SIZE];
       memset(buff, 0, PIPE_BUFF_SIZE);
       sprintf(buff, "%d",nplayers);
 
+      // Sends number of players to the child processes
       for (int i = 0; i < nplayers; i++) {
         write(p2[1], buff, PIPE_BUFF_SIZE);
       }
       printf("Host sent players: %d\n", nplayers);
 
+      // Single player mode when there is one person
       if (nplayers == 1){
         singlemode = true;
       }
@@ -575,8 +572,6 @@ int main (int argc, char *argv[]) {
         memset(rmsg, 0, PIPE_BUFF_SIZE);
         FD_ZERO(&set);
         FD_SET(p1[0],&set);
-
-
 
         // Count number of each result
         timeout.tv_usec = 0;
